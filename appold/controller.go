@@ -1,8 +1,10 @@
-package app
+package appold
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 
 	appconfig "github.com/gxmmx/compage-go/config"
@@ -11,7 +13,27 @@ import (
 	apputils "github.com/gxmmx/compage-go/utils"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+// -----------------------------------------------------------------------------
+// Interfaces
+// -----------------------------------------------------------------------------
+
+type ApplicationController interface {
+	BindFlags(*pflag.FlagSet)
+	BindFlag(string, *pflag.Flag)
+	Execute() error
+	GetLogger() *slog.Logger
+	GetConfig(dest any) error
+	GetRawConfig() map[string]any
+	GetContext() context.Context
+	WriteConfig() error
+}
+
+// -----------------------------------------------------------------------------
+// Application functions
+// -----------------------------------------------------------------------------
 
 type Settings struct {
 	Name      string
@@ -25,13 +47,16 @@ type Settings struct {
 type Application struct {
 	RootCmd *cobra.Command
 
-	ctx context.Context
-	end context.CancelFunc
-	awg *sync.WaitGroup
+	ctx     context.Context
+	end     context.CancelFunc
+	awg     *sync.WaitGroup
+	sigChan chan os.Signal
+	// units   []AppUnit
 
 	config *appconfig.Controller
 	logger *applogger.Controller
 
+	flags    map[string]*pflag.Flag
 	settings *Settings
 }
 
@@ -61,6 +86,8 @@ func NewApplication(settings *Settings) *Application {
 	app.ctx = ctx
 	app.end = cancel
 	app.awg = awg
+	app.sigChan = make(chan os.Signal, 1)
+	// app.units = make([]AppUnit, 0)
 
 	// Root Command
 	var (
@@ -88,6 +115,10 @@ func NewApplication(settings *Settings) *Application {
 	return app
 }
 
+// -----------------------------------------------------------------------------
+// Internal functions
+// -----------------------------------------------------------------------------
+
 func (a *Application) initialize() {
 	// Config settings
 	confset := appconfig.NewSettings()
@@ -107,28 +138,70 @@ func (a *Application) initialize() {
 	}
 
 	a.config = appconfig.NewController(confset)
-	a.config.Init()
-	a.config.ReadConfig()
+	errs := a.config.Init(a.flags)
 
 	// Log settings
 	logset := applogger.NewSettings()
 	logset.AppName = a.settings.Name
-	logset.Level = a.config.GetString("loglevel")
+	logset.Level = a.config.GetLogLevel()
 	logset.Class = "app"
 	a.logger = applogger.NewController(logset)
-}
 
-func (a *Application) Execute() error {
-	return a.RootCmd.ExecuteContext(a.ctx)
-}
-
-func (a *Application) GetLogger() *slog.Logger {
-	if a.logger == nil {
-		a.logger = applogger.NewController(nil)
+	for _, err := range errs {
+		if err != nil {
+			a.logger.GetLogger().ErrorContext(a.ctx, fmt.Sprintf("error: %v", err))
+		}
 	}
-	return a.logger.GetLogger()
 }
 
-func (a *Application) GetContext() context.Context {
-	return a.ctx
+// -----------------------------------------------------------------------------
+// Bind flags for configuration
+// -----------------------------------------------------------------------------
+
+func (a *Application) BindFlags(fs *pflag.FlagSet) {
+	if fs == nil {
+		return
+	}
+	if a.flags == nil {
+		// create a new map of string to pflag.Flag
+		a.flags = make(map[string]*pflag.Flag)
+	}
+	// append flagset to the map using visitall
+	fs.VisitAll(func(f *pflag.Flag) {
+		if f == nil {
+			return
+		}
+		if _, ok := a.flags[f.Name]; !ok {
+			a.flags[f.Name] = f
+		}
+	})
+}
+
+func (a *Application) BindFlag(name string, f *pflag.Flag) {
+	if f == nil {
+		return
+	}
+	if a.flags == nil {
+		a.flags = make(map[string]*pflag.Flag)
+	}
+	if _, ok := a.flags[name]; !ok {
+		a.flags[name] = f
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Execute the application
+// -----------------------------------------------------------------------------
+
+// Run from main
+func (a *Application) Execute() error {
+	return a.RootCmd.Execute()
+}
+
+// -----------------------------------------------------------------------------
+// Flow control
+// -----------------------------------------------------------------------------
+
+// Runs a long running application. Run from the Cobra run functions
+func (a *Application) Run() {
 }

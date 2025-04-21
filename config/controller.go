@@ -3,13 +3,27 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	apperrors "github.com/gxmmx/compage-go/errors"
 	apputils "github.com/gxmmx/compage-go/utils"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
+
+// -----------------------------------------------------------------------------
+// Interfaces
+// -----------------------------------------------------------------------------
+
+type ConfigController interface {
+	Init(map[string]*pflag.Flag) []error
+	WriteConfig() error
+	GetLogLevel() string
+	GetConfig(dest any) error
+	GetRawConfig() map[string]any
+}
 
 // -----------------------------------------------------------------------------
 // Controller
@@ -55,10 +69,42 @@ func NewController(settings *Settings) *Controller {
 }
 
 // -----------------------------------------------------------------------------
-// Controller public functions
+// Internal functions
 // -----------------------------------------------------------------------------
 
-func (c *Controller) Init() {
+func (c *Controller) bindFlags(flags map[string]*pflag.Flag) {
+	for n, f := range flags {
+		err := c.config.BindPFlag(n, f)
+		if err != nil {
+			c.warnings = append(c.warnings, apperrors.Internal(err, "failed to bind flag to config"))
+		}
+	}
+}
+
+func (c *Controller) readConfig() {
+	// Read the config from a file
+	err := c.config.ReadInConfig()
+	if err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// Config file not found; ignore
+			// fmt.Println("Config file not found, using defaults")
+		} else {
+			c.warnings = append(c.warnings, apperrors.Internal(err, "failed to read config file"))
+		}
+	}
+
+	// Set log level from command line
+	if c.settings.LogFromCmdLine != "" {
+		// fmt.Println("Log level set from command line inside read:", c.settings.LogFromCmdLine)
+		c.config.Set("log.level", c.settings.LogFromCmdLine)
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Public functions
+// -----------------------------------------------------------------------------
+
+func (c *Controller) Init(flags map[string]*pflag.Flag) []error {
 	cnfFileEnvName := fmt.Sprintf("%s_%s", c.settings.EnvPrefix, apputils.EnvifyString(c.settings.CnfName))
 
 	if c.settings.CnfFromCmdLine != "" {
@@ -79,59 +125,64 @@ func (c *Controller) Init() {
 
 	c.config.SetEnvPrefix(c.settings.EnvPrefix)
 	c.config.AutomaticEnv()
-	c.config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	c.config.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 
-	c.config.SetDefault("loglevel", "info")
-}
+	c.config.SetDefault("log.level", "info")
 
-func (c *Controller) SetDefault(key string, value any) {
-	c.config.SetDefault(key, value)
-}
+	c.bindFlags(flags)
+	c.readConfig()
 
-func (c *Controller) ReadConfig() {
-	// Read the config from a file
-	err := c.config.ReadInConfig()
-	if err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// Config file not found; ignore
-			// fmt.Println("Config file not found, using defaults")
-		} else {
-			c.warnings = append(c.warnings, apperrors.Internal(err, "failed to read config file"))
-		}
-	}
-
-	// Set log level from command line
-	if c.settings.LogFromCmdLine != "" {
-		// fmt.Println("Log level set from command line inside read:", c.settings.LogFromCmdLine)
-		c.config.Set("loglevel", c.settings.LogFromCmdLine)
-	}
-}
-
-func (c *Controller) WriteConfig() {
-	// Write the config to a file
-	err := c.config.WriteConfig()
-	if err != nil {
-		c.warnings = append(c.warnings, apperrors.Internal(err, "failed to write config file"))
-	}
-}
-
-func (c *Controller) HasWarning() bool {
-	return len(c.warnings) > 0
-}
-
-func (c *Controller) GetWarnings() []error {
 	return c.warnings
 }
 
-func (c *Controller) GetConfig(dest any) error {
-	err := c.config.Unmarshal(dest)
+// -----------------------------------------------------------------------------
+// Usage functions
+// -----------------------------------------------------------------------------
+
+func (c *Controller) WriteConfig() error {
+	if len(c.warnings) > 0 {
+		return apperrors.Internal(fmt.Errorf("config has warnings"), "will not write config")
+	}
+	// Write the config to a file
+	file := fmt.Sprintf("%s.%s", c.settings.CnfName, c.settings.CnfType)
+	path := filepath.Join(c.settings.CnfDir, file)
+	err := c.config.WriteConfigAs(path)
 	if err != nil {
-		c.warnings = append(c.warnings, apperrors.Internal(err, "failed to unmarshal config"))
-		return err
+		// wrap error with message
+		return apperrors.Internal(err, "failed to write config file")
 	}
 	return nil
 }
 
-func (c *Controller) GetString(key string) string {
-	return c.config.GetString(key)
+func (c *Controller) GetLogLevel() string {
+	logLevel := c.config.GetString("log.level")
+	if logLevel == "" {
+		return "info"
+	}
+	return logLevel
 }
+
+func (c *Controller) GetConfig(dest any) error {
+	// if len(c.warnings) > 0 {
+	// 	return c.warnings
+	// }
+	err := c.config.Unmarshal(dest)
+	if err != nil {
+		return apperrors.Internal(err, "failed to unmarshal config")
+	}
+	return nil
+}
+
+func (c *Controller) GetRawConfig() map[string]any {
+	// Get the raw config
+	rawConfig := c.config.AllSettings()
+	return rawConfig
+}
+
+// func (c *Controller) GetString(key string) string {
+// 	return c.config.GetString(key)
+// }
+
+// func (c *Controller) GetInt(key string) int {
+// 	return c.config.GetInt(key)
+// }
