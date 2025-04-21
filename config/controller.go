@@ -84,7 +84,7 @@ func (c *Controller) Init() {
 	c.config.SetDefault("loglevel", "info")
 }
 
-func (c *Controller) SetDefault(key string, value interface{}) {
+func (c *Controller) SetDefault(key string, value any) {
 	c.config.SetDefault(key, value)
 }
 
@@ -94,7 +94,7 @@ func (c *Controller) ReadConfig() {
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found; ignore
-			fmt.Println("Config file not found, using defaults")
+			// fmt.Println("Config file not found, using defaults")
 		} else {
 			c.warnings = append(c.warnings, apperrors.Internal(err, "failed to read config file"))
 		}
@@ -116,10 +116,7 @@ func (c *Controller) WriteConfig() {
 }
 
 func (c *Controller) HasWarning() bool {
-	if len(c.warnings) > 0 {
-		return true
-	}
-	return false
+	return len(c.warnings) > 0
 }
 
 func (c *Controller) GetWarnings() []error {
@@ -133,4 +130,8 @@ func (c *Controller) GetConfig(dest any) error {
 		return err
 	}
 	return nil
+}
+
+func (c *Controller) GetString(key string) string {
+	return c.config.GetString(key)
 }

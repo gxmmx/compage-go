@@ -1,8 +1,10 @@
-package context
+package ctx
 
 import (
 	"context"
 	"fmt"
+
+	apputils "github.com/gxmmx/compage-go/utils"
 )
 
 type contextKey string
@@ -11,6 +13,9 @@ const unitKey contextKey = "unit"
 
 // Returns a new context with unit string
 func New(name string) (context.Context, context.CancelFunc) {
+	if name == "" {
+		name = apputils.AppNameFromBin()
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, unitKey, name)
 	return ctx, cancel

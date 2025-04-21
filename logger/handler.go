@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"os"
 
-	appcontext "github.com/gxmmx/compage-go/context"
+	appcontext "github.com/gxmmx/compage-go/ctx"
 )
 
 func logHandlerOptions(level *slog.LevelVar) *slog.HandlerOptions {
@@ -74,14 +74,20 @@ func (h *logHandler) Handle(ctx context.Context, r slog.Record) error {
 	r.AddAttrs(slog.String("class", class), slog.Group("data", recordAttrs...))
 
 	// Send to external handler if provided
-	if h.extHandler != nil {
+	if h.extHandler != nil && h.extHandler.Enabled(ctx, r.Level) {
 		h.extHandler.Handle(ctx, r)
 	}
-	// Route logs to stdout or stderr based on level
+	// Send to stdout or stderr based on log level
 	if r.Level >= slog.LevelWarn {
-		return h.errHandler.Handle(ctx, r)
+		if h.errHandler.Enabled(ctx, r.Level) {
+			return h.errHandler.Handle(ctx, r)
+		}
+	} else {
+		if h.outHandler.Enabled(ctx, r.Level) {
+			return h.outHandler.Handle(ctx, r)
+		}
 	}
-	return h.outHandler.Handle(ctx, r)
+	return nil
 }
 
 func (h *logHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
