@@ -2,7 +2,6 @@ package appold
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -139,6 +138,7 @@ func (a *Application) initialize() {
 
 	a.config = appconfig.NewController(confset)
 	errs := a.config.Init(a.flags)
+	_ = errs
 
 	// Log settings
 	logset := applogger.NewSettings()
@@ -147,11 +147,11 @@ func (a *Application) initialize() {
 	logset.Class = "app"
 	a.logger = applogger.NewController(logset)
 
-	for _, err := range errs {
-		if err != nil {
-			a.logger.GetLogger().ErrorContext(a.ctx, fmt.Sprintf("error: %v", err))
-		}
-	}
+	// for _, err := range errs {
+	// 	if err != nil {
+	// 		a.logger.GetLogger().ErrorContext(a.ctx, fmt.Sprintf("error: %v", err))
+	// 	}
+	// }
 }
 
 // -----------------------------------------------------------------------------

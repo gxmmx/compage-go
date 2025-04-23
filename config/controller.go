@@ -40,7 +40,6 @@ type Settings struct {
 
 type Controller struct {
 	settings *Settings
-	warnings []error
 
 	config *viper.Viper
 }
@@ -64,7 +63,6 @@ func NewController(settings *Settings) *Controller {
 	return &Controller{
 		config:   viper.New(),
 		settings: settings,
-		warnings: make([]error, 0),
 	}
 }
 
@@ -72,16 +70,17 @@ func NewController(settings *Settings) *Controller {
 // Internal functions
 // -----------------------------------------------------------------------------
 
-func (c *Controller) bindFlags(flags map[string]*pflag.Flag) {
+func (c *Controller) bindFlags(flags map[string]*pflag.Flag) error {
 	for n, f := range flags {
 		err := c.config.BindPFlag(n, f)
 		if err != nil {
-			c.warnings = append(c.warnings, apperrors.Internal(err, "failed to bind flag to config"))
+			return apperrors.Internal(err, "failed to bind flag to config")
 		}
 	}
+	return nil
 }
 
-func (c *Controller) readConfig() {
+func (c *Controller) readConfig() error {
 	// Read the config from a file
 	err := c.config.ReadInConfig()
 	if err != nil {
@@ -89,7 +88,7 @@ func (c *Controller) readConfig() {
 			// Config file not found; ignore
 			// fmt.Println("Config file not found, using defaults")
 		} else {
-			c.warnings = append(c.warnings, apperrors.Internal(err, "failed to read config file"))
+			return apperrors.Internal(err, "failed to read config file")
 		}
 	}
 
@@ -98,13 +97,14 @@ func (c *Controller) readConfig() {
 		// fmt.Println("Log level set from command line inside read:", c.settings.LogFromCmdLine)
 		c.config.Set("log.level", c.settings.LogFromCmdLine)
 	}
+	return nil
 }
 
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
 
-func (c *Controller) Init(flags map[string]*pflag.Flag) []error {
+func (c *Controller) Init(flags map[string]*pflag.Flag) error {
 	cnfFileEnvName := fmt.Sprintf("%s_%s", c.settings.EnvPrefix, apputils.EnvifyString(c.settings.CnfName))
 
 	if c.settings.CnfFromCmdLine != "" {
@@ -129,10 +129,15 @@ func (c *Controller) Init(flags map[string]*pflag.Flag) []error {
 
 	c.config.SetDefault("log.level", "info")
 
-	c.bindFlags(flags)
-	c.readConfig()
-
-	return c.warnings
+	err := c.bindFlags(flags)
+	if err != nil {
+		return err
+	}
+	err = c.readConfig()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // -----------------------------------------------------------------------------
@@ -140,9 +145,6 @@ func (c *Controller) Init(flags map[string]*pflag.Flag) []error {
 // -----------------------------------------------------------------------------
 
 func (c *Controller) WriteConfig() error {
-	if len(c.warnings) > 0 {
-		return apperrors.Internal(fmt.Errorf("config has warnings"), "will not write config")
-	}
 	// Write the config to a file
 	file := fmt.Sprintf("%s.%s", c.settings.CnfName, c.settings.CnfType)
 	path := filepath.Join(c.settings.CnfDir, file)
@@ -163,9 +165,6 @@ func (c *Controller) GetLogLevel() string {
 }
 
 func (c *Controller) GetConfig(dest any) error {
-	// if len(c.warnings) > 0 {
-	// 	return c.warnings
-	// }
 	err := c.config.Unmarshal(dest)
 	if err != nil {
 		return apperrors.Internal(err, "failed to unmarshal config")
