@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
+	"time"
 )
 
 // -----------------------------------------------------------------------------
@@ -10,41 +13,46 @@ import (
 
 type ApplicationUnit interface {
 	Name() string
+	GetLogger() *slog.Logger
+	GetConfig(sub string, m any) error
+	GetApp() *App
 	GetCtx() context.Context
 	GetEnd() context.CancelFunc
+	GetSink(ctx context.Context, unit string) (any, bool)
+	SetSink(value any)
 	setApp(app *App)
 	setCtx(ctx context.Context)
 	setEnd(end context.CancelFunc)
-	run(*App)
+	run(ApplicationUnit)
 }
 
 // -----------------------------------------------------------------------------
 // Concrete types
 // -----------------------------------------------------------------------------
 
-type UnitFunc func(app *App)
+type UnitFunc func(unit ApplicationUnit)
 
-type AppUnit[T any] struct {
+type AppUnit struct {
 	app *App
 	ctx context.Context
 	end context.CancelFunc
 
 	name    string
 	runFunc UnitFunc
-	sink    Sink[T]
+	sink    Sink
 }
 
 // -----------------------------------------------------------------------------
 // Constructors
 // -----------------------------------------------------------------------------
 
-func NewUnit[T any](name string, run UnitFunc) *AppUnit[T] {
-	return &AppUnit[T]{
+func NewUnit(name string, run UnitFunc) *AppUnit {
+	return &AppUnit{
 		app: nil,
 		ctx: nil,
 		end: nil,
 
-		sink: *NewSink[T](),
+		sink: *NewSink(),
 
 		name:    name,
 		runFunc: run,
@@ -55,41 +63,81 @@ func NewUnit[T any](name string, run UnitFunc) *AppUnit[T] {
 // Methods
 // -----------------------------------------------------------------------------
 
-func (u *AppUnit[T]) run(app *App) {
-	u.runFunc(app)
+func (u *AppUnit) run(unit ApplicationUnit) {
+	u.runFunc(unit)
 }
 
-func (u *AppUnit[T]) Name() string {
+func (u *AppUnit) Name() string {
 	return u.name
 }
 
-func (u *AppUnit[T]) GetCtx() context.Context {
+func (u *AppUnit) GetLogger() *slog.Logger {
+	if u.app == nil {
+		panic("Unit is not initialized with an app definition")
+	}
+	return u.app.logger.GetLogger()
+}
+
+func (u *AppUnit) GetConfig(sub string, m any) error {
+	if u.app == nil {
+		panic("Unit is not initialized with an app definition")
+	}
+	return u.app.config.GetConfig(sub, m)
+}
+
+func (u *AppUnit) GetApp() *App {
+	if u.app == nil {
+		panic("Unit is not initialized with an app definition")
+	}
+	return u.app
+}
+
+func (u *AppUnit) GetCtx() context.Context {
 	if u.ctx == nil {
 		return context.Background()
 	}
 	return u.ctx
 }
-func (u *AppUnit[T]) GetEnd() context.CancelFunc {
+func (u *AppUnit) GetEnd() context.CancelFunc {
 	if u.end == nil {
 		return func() {}
 	}
 	return u.end
 }
 
-func (u *AppUnit[T]) setApp(app *App) {
+func (u *AppUnit) setApp(app *App) {
 	u.app = app
 }
-func (u *AppUnit[T]) setCtx(ctx context.Context) {
+func (u *AppUnit) setCtx(ctx context.Context) {
 	u.ctx = ctx
 }
-func (u *AppUnit[T]) setEnd(end context.CancelFunc) {
+func (u *AppUnit) setEnd(end context.CancelFunc) {
 	u.end = end
 }
 
-func (u *AppUnit[T]) GetSink() {
-	u.sink.get()
+func (u *AppUnit) GetSink(ctx context.Context, unit string) (any, bool) {
+	// TODO: - wait for sink to be set
+	if unit == u.name {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil, false
+			default:
+				snk, ok := u.sink.get()
+				if ok {
+					return snk, ok
+				}
+				fmt.Println("Waiting for sink to be set")
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+	}
+	if ou, ok := u.app.units[unit]; ok {
+		return ou.GetSink(ctx, ou.Name())
+	}
+	return nil, false
 }
 
-func (u *AppUnit[T]) SetSink(v T) {
-	u.sink.set(v)
+func (u *AppUnit) SetSink(value any) {
+	u.sink.set(value)
 }

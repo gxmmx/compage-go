@@ -82,6 +82,11 @@ func NewApp(settings *AppSettings) *App {
 
 	app.units = newAppUnits()
 
+	if settings.AddConfigCmd {
+		configCmd := genConfigCommand(app)
+		app.command.AddCommand(configCmd)
+	}
+
 	return app
 }
 
@@ -191,10 +196,9 @@ func (a *App) runUnits() {
 		a.wg.Add(1)
 		go func(u ApplicationUnit) {
 			defer a.wg.Done()
-			cancel := u.GetEnd()
-			defer cancel()
-			a.logger.GetLogger().DebugContext(a.ctx, "Starting unit: "+u.Name())
-			unit.run(a)
+			a.logger.GetLogger().DebugContext(a.ctx, "Unit starting: "+appctx.GetUnitName(u.GetCtx()))
+			u.run(u)
+			a.logger.GetLogger().DebugContext(a.ctx, "Unit complete: "+appctx.GetUnitName(u.GetCtx()))
 		}(unit)
 	}
 }

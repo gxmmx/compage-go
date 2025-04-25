@@ -7,17 +7,17 @@ import "sync"
 // -----------------------------------------------------------------------------
 
 type UnitSink interface {
-	get()
-	set()
+	get() (any, bool)
+	set(any)
 }
 
 // -----------------------------------------------------------------------------
 // Concrete types
 // -----------------------------------------------------------------------------
 
-type Sink[T any] struct {
+type Sink struct {
 	mu    sync.RWMutex
-	data  T
+	data  any
 	isSet bool
 }
 
@@ -25,10 +25,10 @@ type Sink[T any] struct {
 // Constructors
 // -----------------------------------------------------------------------------
 
-func NewSink[T any]() *Sink[T] {
-	return &Sink[T]{
+func NewSink() *Sink {
+	return &Sink{
 		mu:    sync.RWMutex{},
-		data:  *new(T),
+		data:  nil,
 		isSet: false,
 	}
 }
@@ -38,7 +38,7 @@ func NewSink[T any]() *Sink[T] {
 // -----------------------------------------------------------------------------
 
 // Set stores a typed value safely
-func (s *Sink[T]) set(v T) {
+func (s *Sink) set(v any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data = v
@@ -46,7 +46,7 @@ func (s *Sink[T]) set(v T) {
 }
 
 // Get retrieves the typed value safely
-func (s *Sink[T]) get() (T, bool) {
+func (s *Sink) get() (any, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.data, s.isSet

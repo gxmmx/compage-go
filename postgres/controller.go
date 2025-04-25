@@ -16,27 +16,17 @@ import (
 )
 
 // -----------------------------------------------------------------------------
-// Controller
+// Interfaces
 // -----------------------------------------------------------------------------
 
-type Settings struct {
-	Host string
-	Port int
-	Name string
-	User string
-	Pass string
-
-	SslMode  string
-	SslCaCrt *x509.Certificate
-	// Trust certificate authority from host
-	SslDevMode bool
-
-	MaxConns          int
-	MinConns          int
-	MaxConnLifetime   time.Duration
-	HealthCheckPeriod time.Duration
-	QueryTimeout      time.Duration
+type PostgresController interface {
+	Init(ctx context.Context, resilient bool)
+	GetPool() (*pgxpool.Pool, error)
 }
+
+// -----------------------------------------------------------------------------
+// Concrete types
+// -----------------------------------------------------------------------------
 
 type Controller struct {
 	pool *pgxpool.Pool
@@ -46,23 +36,9 @@ type Controller struct {
 	settings *Settings
 }
 
-func NewSettings() *Settings {
-	return &Settings{
-		Host:              "localhost",
-		Port:              5432,
-		Name:              "postgres",
-		User:              "postgres",
-		Pass:              "postgres",
-		SslMode:           "verify-full",
-		SslCaCrt:          nil,
-		SslDevMode:        false,
-		MaxConns:          10,
-		MinConns:          2,
-		MaxConnLifetime:   time.Hour,
-		HealthCheckPeriod: time.Minute,
-		QueryTimeout:      5 * time.Second,
-	}
-}
+// -----------------------------------------------------------------------------
+// Constructors
+// -----------------------------------------------------------------------------
 
 func NewController(settings *Settings, logger *slog.Logger) *Controller {
 	if settings == nil {
@@ -78,14 +54,13 @@ func NewController(settings *Settings, logger *slog.Logger) *Controller {
 }
 
 // -----------------------------------------------------------------------------
-// Controller public functions
+// Public functions
 // -----------------------------------------------------------------------------
 
 func (m *Controller) Init(ctx context.Context, resilient bool) {
 	if m.pool != nil {
 		return
 	}
-
 	// if not resilient, create connection pool
 	if !resilient {
 		// Create connection pool
@@ -99,35 +74,42 @@ func (m *Controller) Init(ctx context.Context, resilient bool) {
 		defer m.lock.Unlock()
 		m.pool = pool
 	} else {
-		go func() {
-			// Create connection pool with retries
-			ticker := time.NewTicker(5 * time.Second)
-			defer ticker.Stop()
-		loop:
-			for {
-				select {
-				case <-ctx.Done():
-					break loop
-				default:
-					pool, err := m.createPool(ctx)
-					if err != nil {
-						createError := apperrors.Internal(err, "failed to create connection pool, retrying..")
-						m.log.ErrorContext(ctx, createError.Error())
-						<-ticker.C
-						continue loop
-					}
-					m.lock.Lock()
-					defer m.lock.Unlock()
-					m.pool = pool
-					break loop
+		// Create connection pool with retries
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+	loop:
+		for {
+			select {
+			case <-ctx.Done():
+				break loop
+			default:
+				pool, err := m.createPool(ctx)
+				if err != nil {
+					createError := apperrors.Internal(err, "failed to create connection pool, retrying..")
+					m.log.ErrorContext(ctx, createError.Error())
+					<-ticker.C
+					continue loop
 				}
+				m.lock.Lock()
+				defer m.lock.Unlock()
+				m.pool = pool
+				break loop
 			}
-		}()
+		}
 	}
 }
 
+func (m *Controller) GetPool() (*pgxpool.Pool, error) {
+	if m.pool == nil {
+		return nil, apperrors.Internal(nil, "database connection pool is not initialized")
+	}
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	return m.pool, nil
+}
+
 // -----------------------------------------------------------------------------
-// Controller internal functions
+// Internal functions
 // -----------------------------------------------------------------------------
 
 func (m *Controller) createPool(ctx context.Context) (*pgxpool.Pool, error) {

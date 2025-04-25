@@ -21,7 +21,7 @@ type ConfigController interface {
 	Init(map[string]*pflag.Flag) []error
 	WriteConfig() error
 	GetLogLevel() string
-	GetConfig(dest any) error
+	GetConfig(sub string, m any) error
 	GetRawConfig() map[string]any
 }
 
@@ -164,8 +164,17 @@ func (c *Controller) GetLogLevel() string {
 	return logLevel
 }
 
-func (c *Controller) GetConfig(dest any) error {
-	err := c.config.Unmarshal(dest)
+func (c *Controller) GetConfig(sub string, m any) error {
+	var cnf *viper.Viper
+	if sub == "" {
+		cnf = c.config
+	} else {
+		cnf = c.config.Sub(sub)
+		if cnf == nil {
+			return apperrors.Internal(nil, fmt.Sprintf("failed to get config sub '%s'", sub))
+		}
+	}
+	err := cnf.Unmarshal(m)
 	if err != nil {
 		return apperrors.Internal(err, "failed to unmarshal config")
 	}
