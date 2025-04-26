@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 )
@@ -127,7 +126,6 @@ func (u *AppUnit) GetSink(ctx context.Context, unit string) (any, bool) {
 				if ok {
 					return snk, ok
 				}
-				fmt.Println("Waiting for sink to be set")
 				time.Sleep(50 * time.Millisecond)
 			}
 		}

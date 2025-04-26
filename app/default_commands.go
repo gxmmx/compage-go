@@ -20,6 +20,12 @@ func configWriteFunc(u ApplicationUnit) {
 	u.GetApp().End(0)
 }
 
+func configReadFunc(u ApplicationUnit) {
+	conf := u.GetApp().config.GetRawConfig()
+	u.GetLogger().InfoContext(u.GetCtx(), "config read successfully", "config", conf)
+	u.GetApp().End(0)
+}
+
 func genConfigCommand(a *App) *cobra.Command {
 	configCmd := &cobra.Command{
 		Use:   "config",
@@ -29,7 +35,7 @@ func genConfigCommand(a *App) *cobra.Command {
 
 	configWriteCmd := &cobra.Command{
 		Use:   "write",
-		Short: "Write config to file",
+		Short: "Write current config to file",
 		Long:  fmt.Sprintf("Persist current config to file (path: %s)", a.settings.ConfigDir),
 		Run: func(cmd *cobra.Command, args []string) {
 			unit := NewUnit("config", configWriteFunc)
@@ -37,6 +43,19 @@ func genConfigCommand(a *App) *cobra.Command {
 			a.Run()
 		},
 	}
+
+	configReadCmd := &cobra.Command{
+		Use:   "read",
+		Short: "Read current config",
+		Long:  "Read current config from file, env, and flags",
+		Run: func(cmd *cobra.Command, args []string) {
+			unit := NewUnit("config", configReadFunc)
+			a.AddUnit(unit)
+			a.Run()
+		},
+	}
+
 	configCmd.AddCommand(configWriteCmd)
+	configCmd.AddCommand(configReadCmd)
 	return configCmd
 }
