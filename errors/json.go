@@ -10,14 +10,16 @@ type JSONError struct {
 
 func (e *AppError) ToJSON(debug bool) JSONError {
 	msg := e.Message
+	fields := e.AllFields()
 	if e.Kind == KindInternal && !debug {
-		msg = "Internal error"
+		msg = "internal error"
+		fields = nil
 	}
 
 	return JSONError{
 		Kind:    e.Kind,
 		Message: msg,
-		Fields:  e.Fields,
+		Fields:  fields,
 	}
 }
 

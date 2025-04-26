@@ -1,15 +1,42 @@
 package errors
 
+// -----------------------------------------------------------------------------
+// New Constructor
+// -----------------------------------------------------------------------------
+
 func New(kind Kind, msg string, err error) *AppError {
-	return &AppError{
+	appErr := &AppError{
 		Kind:    kind,
 		Message: msg,
-		Err:     err,
-		Fields:  nil,
+		Fields:  make(map[string]any),
 	}
+
+	if err == nil {
+		return appErr
+	}
+
+	switch e := err.(type) {
+	case *AppError:
+		// Preserve the inner AppError
+		appErr.Err = e
+		// Merge fields (outer overrides inner if same key)
+		for k, v := range e.AllFields() {
+			if _, exists := appErr.Fields[k]; !exists {
+				appErr.Fields[k] = v
+			}
+		}
+	default:
+		// Regular error
+		appErr.Err = e
+	}
+
+	return appErr
 }
 
-// Convenience functions
+// -----------------------------------------------------------------------------
+// Convenience constructors
+// -----------------------------------------------------------------------------
+
 func AlreadyExists(err error, msg string) *AppError {
 	return New(KindAlreadyExists, msg, err)
 }

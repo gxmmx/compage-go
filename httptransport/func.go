@@ -11,3 +11,10 @@ func getClientIP(r *http.Request) string {
 	}
 	return clientIP
 }
+
+func calculateNextPage(currentPage, perPage, totalCount int) int {
+	if currentPage*perPage >= totalCount {
+		return 0
+	}
+	return currentPage + 1
+}
