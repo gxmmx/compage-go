@@ -7,8 +7,13 @@ import (
 	"strconv"
 	"time"
 
+	uuid "github.com/google/uuid"
 	apperrors "github.com/gxmmx/compage-go/errors"
 )
+
+// -----------------------------------------------------------------------------
+// Logging middleware
+// -----------------------------------------------------------------------------
 
 type loggingResponseWriter struct {
 	http.ResponseWriter
@@ -25,7 +30,7 @@ func (lrw *loggingResponseWriter) writeError(err error) {
 	lrw.err = err
 }
 
-// Adds logging to the request
+// Middleware to add logging to the request
 func (c *Controller) logMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -39,30 +44,63 @@ func (c *Controller) logMiddleware(next http.Handler) http.Handler {
 		status := strconv.Itoa(lrw.statusCode)
 
 		// log unsuccessful request
+		logFields := []interface{}{
+			"class", "event",
+			"ip", clientIP,
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", status,
+			"duration", duration,
+		}
+
+		requestID := getRequestIdFromRequest(r)
+		if requestID != "" {
+			logFields = append(logFields, "requestID", requestID)
+		}
+
 		if lrw.err != nil {
 			var appErr *apperrors.AppError
 			if errors.As(lrw.err, &appErr) {
 				if appErr.Kind == apperrors.KindInternal {
-					c.log.ErrorContext(r.Context(), "request error", "class", "event", "ip", clientIP, "method", r.Method, "path", r.URL.Path, "status", status, "duration", duration, "error", appErr.Error())
-					return
+					c.log.ErrorContext(r.Context(), "request error", append(logFields, "error", appErr.Error())...)
 				} else {
-					c.log.WarnContext(r.Context(), "request unsuccessful", "class", "event", "ip", clientIP, "method", r.Method, "path", r.URL.Path, "status", status, "duration", duration)
-					return
+					c.log.WarnContext(r.Context(), "request unsuccessful", append(logFields, "error", appErr.Error())...)
 				}
 			} else {
-				c.log.ErrorContext(r.Context(), "request error", "class", "event", "ip", clientIP, "method", r.Method, "path", r.URL.Path, "status", status, "duration", duration, "error", lrw.err.Error())
+				c.log.ErrorContext(r.Context(), "request error", append(logFields, "error", lrw.err.Error())...)
 			}
+		} else {
+			// log successful request
+			c.log.InfoContext(r.Context(), "request successful", logFields...)
 		}
-		// log successful request
-		c.log.InfoContext(r.Context(), "request successful", "class", "event", "ip", clientIP, "method", r.Method, "path", r.URL.Path, "status", status, "duration", duration)
 	})
 }
 
-// Injects a context into the request
-func (c *Controller) contextMiddleware(ctx context.Context) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
+// -----------------------------------------------------------------------------
+// Request ID middleware
+// -----------------------------------------------------------------------------
+
+type requestIDKey string
+
+const rIdKey requestIDKey = "requestID"
+
+// Middleware to handle request ID
+func (c *Controller) requestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		// Try to get Request ID from header
+		requestID := r.Header.Get("X-Request-ID")
+		if requestID == "" {
+			// Generate a new one if not provided
+			requestID = uuid.New().String()
+			w.Header().Set("X-Request-ID", requestID)
+		}
+
+		// Add it into the context
+		ctx = context.WithValue(ctx, rIdKey, requestID)
+
+		// Pass to next handler
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }

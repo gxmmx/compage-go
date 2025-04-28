@@ -42,3 +42,10 @@ func EnvifyString(input string) string {
 func AppNameFromBin() string {
 	return SlugifyString(filepath.Base(os.Args[0]))
 }
+
+func EnsureLeadingSlash(s string) string {
+	if !strings.HasPrefix(s, "/") {
+		return "/" + s
+	}
+	return s
+}

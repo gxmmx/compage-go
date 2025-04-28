@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	apperrors "github.com/gxmmx/compage-go/errors"
+	utils "github.com/gxmmx/compage-go/utils"
 
 	mux "github.com/gorilla/mux"
 )
@@ -29,12 +30,13 @@ type HTTPController interface {
 // -----------------------------------------------------------------------------
 
 type Controller struct {
-	requestCtx context.Context
-	log        *slog.Logger
+	started bool
+	log     *slog.Logger
 
-	router *mux.Router
-	server *http.Server
-	addr   string
+	addr       string
+	baseRouter *mux.Router
+	subRouters map[string]*mux.Router
+	server     *http.Server
 
 	settings *Settings
 }
@@ -55,24 +57,35 @@ func NewController(settings *Settings, logger *slog.Logger, requestCtx context.C
 	}
 
 	controller := &Controller{
-		requestCtx: requestCtx,
-		settings:   settings,
-		log:        logger,
+		settings: settings,
+		log:      logger,
 	}
 
-	// Create router and server
+	// Create router
 	addr := net.JoinHostPort(settings.Host, strconv.Itoa(settings.Port))
-	router := mux.NewRouter()
+	baseRouter := mux.NewRouter()
+
+	// set prefix
+	if settings.Prefix != "" {
+		baseRouter = baseRouter.PathPrefix(utils.EnsureLeadingSlash(settings.Prefix)).Subrouter()
+	}
 
 	// Set global middleware
-	router.Use(controller.contextMiddleware(requestCtx))
-	router.Use(controller.logMiddleware)
+	// baseRouter.Use(controller.contextMiddleware(requestCtx))
+	baseRouter.Use(controller.requestIDMiddleware)
+	baseRouter.Use(controller.logMiddleware)
 
+	// Set handler for not found
+	baseRouter.NotFoundHandler = notFoundHandler()
+
+	// Create server
 	server := &http.Server{
 		Addr:    addr,
-		Handler: router,
-		// TODO: Look into logger and error logger
-		// TODO: look into base context
+		Handler: baseRouter,
+		BaseContext: func(_ net.Listener) context.Context {
+			return requestCtx
+		},
+		// TODO: Look into error logger - > api errors not logged propperly
 	}
 
 	if settings.SslEnabled {
@@ -93,7 +106,7 @@ func NewController(settings *Settings, logger *slog.Logger, requestCtx context.C
 
 	// Set server
 	controller.addr = addr
-	controller.router = router
+	controller.baseRouter = baseRouter
 	controller.server = server
 
 	return controller
@@ -103,11 +116,38 @@ func NewController(settings *Settings, logger *slog.Logger, requestCtx context.C
 // Public functions
 // -----------------------------------------------------------------------------
 
-func (c *Controller) AddHandler(path string, method string, handler http.HandlerFunc) {
-	c.router.HandleFunc(path, handler).Methods(method)
+func (c *Controller) AddMiddleware(sub string, f mux.MiddlewareFunc) {
+	if c.started {
+		panic("Cannot add middleware after server started")
+	}
+	sub = c.ensureSubRouter(sub)
+	c.subRouters[sub].Use(f)
+}
+
+func (c *Controller) AddHandler(sub string, path string, method string, handler http.HandlerFunc) {
+	if c.started {
+		panic("Cannot add handler after server started")
+	}
+	sub = c.ensureSubRouter(sub)
+	c.subRouters[sub].HandleFunc(path, handler).Methods(method).Name(path)
+	// routePath := ""
+	// err := c.baseRouter.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+	// 	path, pathErr := route.GetPathTemplate()
+	// 	if pathErr != nil {
+	// 		return pathErr
+	// 	}
+	// 	routePath = path
+	// 	return nil
+	// })
+	// if err != nil {
+	// 	fmt.Println("error retrieving route path:", err)
+	// } else {
+	// 	fmt.Println("real route path:", routePath)
+	// }
 }
 
 func (c *Controller) Start(ctx context.Context) error {
+	c.started = true
 	c.log.DebugContext(ctx, "Starting HTTP server", "address", c.server.Addr, "tls", c.settings.SslEnabled)
 	errCh := make(chan error, 1)
 	go func() {
@@ -144,4 +184,23 @@ func (c *Controller) Stop(ctx context.Context) error {
 		return apperrors.Internal(err, "transport failed to shut down")
 	}
 	return nil
+}
+
+// -----------------------------------------------------------------------------
+// Internal functions
+// -----------------------------------------------------------------------------
+
+func (c *Controller) ensureSubRouter(sub string) string {
+	if sub == "" {
+		sub = "/v1"
+	}
+	sub = utils.EnsureLeadingSlash(sub)
+	if c.subRouters == nil {
+		c.subRouters = make(map[string]*mux.Router)
+	}
+	if _, ok := c.subRouters[sub]; !ok {
+		subRouter := c.baseRouter.PathPrefix(sub).Subrouter()
+		c.subRouters[sub] = subRouter
+	}
+	return sub
 }

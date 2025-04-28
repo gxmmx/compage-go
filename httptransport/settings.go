@@ -13,6 +13,8 @@ type Settings struct {
 	Host string
 	Port int
 
+	Prefix string
+
 	SwaggerEnabled bool
 	SwaggerPath    string
 
@@ -30,6 +32,7 @@ func NewSettings() *Settings {
 	return &Settings{
 		Host:           "",
 		Port:           3000,
+		Prefix:         "",
 		SwaggerEnabled: false,
 		SwaggerPath:    "/swagger",
 		SslEnabled:     false,
