@@ -1,14 +1,17 @@
 package app
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // -----------------------------------------------------------------------------
 // Interfaces
 // -----------------------------------------------------------------------------
 
 type UnitSink interface {
-	get() (any, bool)
-	set(any)
+	get() (value any, isset bool)
+	set(value any)
 }
 
 // -----------------------------------------------------------------------------
@@ -33,6 +36,14 @@ func NewSink() *Sink {
 	}
 }
 
+func WaitForSink[T any](ctx context.Context, s UnitSink) (value T, isset bool) {
+	v, isset := s.get()
+	if !isset {
+		return *new(T), isset
+	}
+	return v.(T), isset
+}
+
 // -----------------------------------------------------------------------------
 // Methods
 // -----------------------------------------------------------------------------
@@ -46,7 +57,7 @@ func (s *Sink) set(v any) {
 }
 
 // Get retrieves the typed value safely
-func (s *Sink) get() (any, bool) {
+func (s *Sink) get() (value any, isset bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.data, s.isSet

@@ -1,4 +1,4 @@
-package httptransport
+package httpapi
 
 import (
 	"net/http"
@@ -38,6 +38,14 @@ func notFoundHandler() http.Handler {
 	})
 }
 
+// method not allowed handler returns a 405 Method Not Allowed response
+func methodNotAllowedHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := NewResponse(w, r, false)
+		response.Error(apperrors.MethodNotAllowed(nil, "method not allowed"))
+	})
+}
+
 // Turns a slice of specific types into a slice of any for printing
 func ToAnySlice[T any](input []T) []any {
 	out := make([]any, len(input))
@@ -51,11 +59,11 @@ func ToAnySlice[T any](input []T) []any {
 func GetUUID(r *http.Request, key string) (uuid.UUID, error) {
 	id := mux.Vars(r)[key]
 	if id == "" {
-		return uuid.Nil, apperrors.InvalidInput(nil, "missing id")
+		return uuid.Nil, apperrors.InvalidInput(nil, "missing "+id)
 	}
 	validUuid, err := uuid.Parse(id)
 	if err != nil {
-		return uuid.Nil, apperrors.InvalidInput(nil, "invalid id").WithField("id", id)
+		return uuid.Nil, apperrors.InvalidInput(nil, "invalid id").WithField(key, id)
 	}
 	return validUuid, nil
 }

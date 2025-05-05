@@ -1,0 +1,73 @@
+package units
+
+import (
+	"time"
+
+	"github.com/gxmmx/vigilo-central/internal/models"
+	"github.com/gxmmx/vigilo-central/internal/repositories/storage"
+
+	app "github.com/gxmmx/compage-go/app/core"
+	appctx "github.com/gxmmx/compage-go/ctx"
+	postgres "github.com/gxmmx/compage-go/postgres"
+)
+
+func DatabaseUnitOld() app.Unit {
+
+	return app.NewUnit("database", app.UnitKindData, databaseUnitOld)
+}
+
+func databaseUnitOld(u app.Unit) error {
+	log := u.GetLogger()
+
+	// -------------------------------------
+	// Postgres repository
+	// -------------------------------------
+
+	repo := storage.NewPostgresRepository()
+	// u.SetSink(repo)
+
+	// -------------------------------------
+	// Postgres Controller
+	// -------------------------------------
+
+	pgset := postgres.NewSettings()
+	var cnf models.DatabaseConfig
+	err := u.GetConfig("database", &cnf)
+	if err != nil {
+		log.ErrorContext(u.GetCtx(), "failed to get database config, using defaults")
+	} else {
+		pgset.Host = cnf.Host
+		pgset.Port = cnf.Port
+		pgset.Name = cnf.Name
+		pgset.User = cnf.User
+		pgset.Pass = cnf.Pass
+		pgset.SslMode = cnf.SSL.Mode
+		pgset.SslDevMode = cnf.SSL.Dev
+		// set ssl ca cert from func that reads both cont and path
+	}
+
+	pgcCtx, _ := appctx.Child(u.GetCtx(), "controller")
+	pgc := postgres.NewController(pgset, log)
+	pgc.Init(pgcCtx, true)
+
+	for {
+		select {
+		case <-u.GetCtx().Done():
+			return nil
+		default:
+			pool, err := pgc.GetPool()
+			if err != nil {
+				time.Sleep(3 * time.Second)
+			} else {
+				repo.SetPool(pool)
+				return nil
+			}
+		}
+	}
+
+	// log.InfoContext(u.GetCtx(), "Created database connection pool GGG")
+	// u.SetSink(pgc.GetPool())
+	//simulate some work
+	// time.Sleep(11 * time.Second)
+	// panic("oh noo")
+}

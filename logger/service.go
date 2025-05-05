@@ -7,7 +7,6 @@ import (
 
 type LoggerService interface {
 	Start(context.Context) error
-	Stop() error
 	SendRecord(slog.Record)
 	GetHandler() slog.Handler
 }

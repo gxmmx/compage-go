@@ -1,4 +1,4 @@
-package httptransport
+package httpapi
 
 import (
 	"encoding/json"
@@ -164,12 +164,12 @@ func (h *apiResponseHandler) ReadItem(name string, data any) {
 	h.resp.Success = true
 	h.resp.Message = name + " data"
 	h.resp.Data = data
-	h.resp.Meta = &apiMeta{
-		Page:       1,
-		PerPage:    1,
-		NextPage:   0,
-		TotalCount: 1,
-	}
+	// h.resp.Meta = &apiMeta{
+	// 	Page:       1,
+	// 	PerPage:    1,
+	// 	NextPage:   0,
+	// 	TotalCount: 1,
+	// }
 	h.respond(http.StatusOK, nil)
 }
 

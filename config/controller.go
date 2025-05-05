@@ -23,6 +23,9 @@ type ConfigController interface {
 	GetLogLevel() string
 	GetConfig(sub string, m any) error
 	GetRawConfig() map[string]any
+	GetString(key string) string
+	GetInt(key string) int
+	GetBool(key string) bool
 }
 
 // -----------------------------------------------------------------------------
@@ -187,10 +190,13 @@ func (c *Controller) GetRawConfig() map[string]any {
 	return rawConfig
 }
 
-// func (c *Controller) GetString(key string) string {
-// 	return c.config.GetString(key)
-// }
+func (c *Controller) GetString(key string) string {
+	return c.config.GetString(key)
+}
 
-// func (c *Controller) GetInt(key string) int {
-// 	return c.config.GetInt(key)
-// }
+func (c *Controller) GetInt(key string) int {
+	return c.config.GetInt(key)
+}
+func (c *Controller) GetBool(key string) bool {
+	return c.config.GetBool(key)
+}

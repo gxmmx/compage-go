@@ -1,4 +1,4 @@
-package httptransport
+package httpapi
 
 import (
 	"context"

@@ -16,6 +16,8 @@ func (e *AppError) HTTPStatus() int {
 		return http.StatusForbidden
 	case KindTimeout, KindUnavailable:
 		return http.StatusGatewayTimeout
+	case KindMethodNotAllowed:
+		return http.StatusMethodNotAllowed
 	default:
 		return http.StatusInternalServerError
 	}

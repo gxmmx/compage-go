@@ -69,6 +69,10 @@ func Unavailable(err error, msg string) *AppError {
 	return New(KindUnavailable, msg, err)
 }
 
+func MethodNotAllowed(err error, msg string) *AppError {
+	return New(KindMethodNotAllowed, msg, err)
+}
+
 func Internal(err error, msg string) *AppError {
 	return New(KindInternal, msg, err)
 }
