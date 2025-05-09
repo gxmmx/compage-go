@@ -22,6 +22,9 @@ func SlugifyString(input string) string {
 	re := regexp.MustCompile(`[^a-z0-9]+`)
 	slug := re.ReplaceAllString(lower, "-")
 
+	// Remove leading and trailing hyphens
+	slug = strings.Trim(slug, "-")
+
 	// Return the sanitized string
 	return slug
 }
@@ -33,6 +36,9 @@ func EnvifyString(input string) string {
 	// Replace non-alphanumeric characters with single underscores
 	re := regexp.MustCompile(`[^A-Z0-9]+`)
 	env := re.ReplaceAllString(upper, "_")
+
+	// Remove leading and trailing underscores
+	env = strings.Trim(env, "_")
 
 	// Return the sanitized string
 	return env

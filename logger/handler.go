@@ -4,8 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"os"
-
-	appcontext "github.com/gxmmx/compage-go/ctx"
 )
 
 func logHandlerOptions(level *slog.LevelVar) *slog.HandlerOptions {
@@ -26,21 +24,23 @@ func logHandlerOptions(level *slog.LevelVar) *slog.HandlerOptions {
 
 type logHandler struct {
 	defaultClass string
+	defaultUnit  string
 	outHandler   slog.Handler
 	errHandler   slog.Handler
 	extHandler   slog.Handler
 }
 
-func newLogHandler(level *slog.LevelVar, class string, logsvc LoggerService) slog.Handler {
+func newLogHandler(level *slog.LevelVar, class string, unit string, logsvc LoggerService) slog.Handler {
 	var extHandler slog.Handler
 	if logsvc != nil {
-		extHandler = logsvc.GetHandler()
+		extHandler = logsvc
 	}
 
 	stdoutHandler := slog.NewJSONHandler(os.Stdout, logHandlerOptions(level))
 	stderrHandler := slog.NewJSONHandler(os.Stderr, logHandlerOptions(level))
 	return &logHandler{
 		defaultClass: class,
+		defaultUnit:  unit,
 		outHandler:   stdoutHandler,
 		errHandler:   stderrHandler,
 		extHandler:   extHandler,
@@ -55,10 +55,14 @@ func (h *logHandler) Handle(ctx context.Context, r slog.Record) error {
 
 	var recordAttrs []any
 	var class = h.defaultClass
+	var unit = h.defaultUnit
 	r.Attrs(func(a slog.Attr) bool {
-		if a.Key == "class" {
+		switch a.Key {
+		case "class":
 			class = a.Value.String()
-		} else {
+		case "unit":
+			unit = a.Value.String()
+		default:
 			recordAttrs = append(recordAttrs, a)
 		}
 		return true
@@ -66,12 +70,12 @@ func (h *logHandler) Handle(ctx context.Context, r slog.Record) error {
 
 	r = slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
 
-	unit := appcontext.GetUnitName(ctx)
-	if unit != "" {
-		r.AddAttrs(slog.String("unit", unit))
-	}
+	// unit := appcontext.GetUnitName(ctx)
+	// if unit != "" {
+	// 	r.AddAttrs(slog.String("unit", unit))
+	// }
 
-	r.AddAttrs(slog.String("class", class), slog.Group("data", recordAttrs...))
+	r.AddAttrs(slog.String("class", class), slog.String("unit", unit), slog.Group("data", recordAttrs...))
 
 	// Send to external handler if provided
 	if h.extHandler != nil && h.extHandler.Enabled(ctx, r.Level) {
@@ -94,6 +98,7 @@ func (h *logHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	if h.extHandler == nil {
 		return &logHandler{
 			defaultClass: h.defaultClass,
+			defaultUnit:  h.defaultUnit,
 			outHandler:   h.outHandler.WithAttrs(attrs),
 			errHandler:   h.errHandler.WithAttrs(attrs),
 			extHandler:   nil,
@@ -101,6 +106,7 @@ func (h *logHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	}
 	return &logHandler{
 		defaultClass: h.defaultClass,
+		defaultUnit:  h.defaultUnit,
 		outHandler:   h.outHandler.WithAttrs(attrs),
 		errHandler:   h.errHandler.WithAttrs(attrs),
 		extHandler:   h.extHandler.WithAttrs(attrs),
@@ -111,6 +117,7 @@ func (h *logHandler) WithGroup(name string) slog.Handler {
 	if h.extHandler == nil {
 		return &logHandler{
 			defaultClass: h.defaultClass,
+			defaultUnit:  h.defaultUnit,
 			outHandler:   h.outHandler.WithGroup(name),
 			errHandler:   h.errHandler.WithGroup(name),
 			extHandler:   nil,
@@ -118,6 +125,7 @@ func (h *logHandler) WithGroup(name string) slog.Handler {
 	}
 	return &logHandler{
 		defaultClass: h.defaultClass,
+		defaultUnit:  h.defaultUnit,
 		outHandler:   h.outHandler.WithGroup(name),
 		errHandler:   h.errHandler.WithGroup(name),
 		extHandler:   h.extHandler.WithGroup(name),

@@ -77,7 +77,7 @@ func (c *Controller) runUnit(u app.Unit) error {
 	c.log = u.GetLogger()
 	c.compileConfig()
 
-	err := c.Init(u.GetCtx(), true)
+	err := c.Initialize(u.GetCtx(), true)
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (c *Controller) runUnit(u app.Unit) error {
 // Public functions
 // -----------------------------------------------------------------------------
 
-func (c *Controller) Init(ctx context.Context, resilient bool) error {
+func (c *Controller) Initialize(ctx context.Context, resilient bool) error {
 	if c.pool != nil {
 		return nil
 	}

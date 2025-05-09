@@ -15,6 +15,19 @@ const (
 	KindInternal         Kind = "Internal"
 )
 
+var allKinds = []Kind{
+	KindAlreadyExists,
+	KindNotFound,
+	KindInvalidInput,
+	KindUnauthorized,
+	KindForbidden,
+	KindConflict,
+	KindTimeout,
+	KindUnavailable,
+	KindMethodNotAllowed,
+	KindInternal,
+}
+
 var (
 	ErrAlreadyExists    = &AppError{Kind: KindAlreadyExists}
 	ErrNotFound         = &AppError{Kind: KindNotFound}

@@ -2,57 +2,61 @@ package logger
 
 import (
 	"log/slog"
-
-	apputils "github.com/gxmmx/compage-go/utils"
 )
 
-type Settings struct {
-	AppName string
-	Class   string
-	Level   string
-	Service LoggerService
+// -----------------------------------------------------------------------------
+// Interfaces
+// -----------------------------------------------------------------------------
+
+type LogController interface {
+	GetLogger() *slog.Logger
+	SetLevel(level string)
 }
+
+// -----------------------------------------------------------------------------
+// Concrete types
+// -----------------------------------------------------------------------------
 
 type Controller struct {
-	settings *Settings
-	level    *slog.LevelVar
-	logger   *slog.Logger
+	opts *Opts
+
+	level  *slog.LevelVar
+	logger *slog.Logger
 }
 
-func NewSettings() *Settings {
-	return &Settings{
-		AppName: apputils.AppNameFromBin(),
-		Class:   "app",
-		Level:   "info",
-		Service: nil,
+// -----------------------------------------------------------------------------
+// Constructors
+// -----------------------------------------------------------------------------
+
+func New(opts ...OptFunc) *Controller {
+	options := defaultOpts()
+	for _, opt := range opts {
+		opt(options)
 	}
-}
-
-func NewController(settings *Settings) *Controller {
-	if settings == nil {
-		settings = NewSettings()
+	ctrl := &Controller{
+		opts:  options,
+		level: new(slog.LevelVar),
 	}
-	lvl := new(slog.LevelVar)
-	lvl.Set(StringToLevel(settings.Level))
-
-	return &Controller{
-		settings: settings,
-		level:    lvl,
-	}
+	ctrl.SetLevel(options.level)
+	return ctrl
 }
 
-func (m *Controller) SetLevel(level string) {
-	m.level.Set(StringToLevel(level))
-}
+// -----------------------------------------------------------------------------
+// Methods
+// -----------------------------------------------------------------------------
 
 func (m *Controller) GetLogger() *slog.Logger {
 	if m.logger == nil {
 		// create a slice of slog attributes
 		attrs := []slog.Attr{
-			slog.String("app", m.settings.AppName),
+			slog.String("app", m.opts.name),
 		}
 
-		m.logger = slog.New(newLogHandler(m.level, m.settings.Class, m.settings.Service).WithAttrs(attrs))
+		m.logger = slog.New(newLogHandler(m.level, m.opts.class, m.opts.unit, m.opts.service).WithAttrs(attrs))
 	}
 	return m.logger
+}
+
+func (m *Controller) SetLevel(level string) {
+	m.level.Set(StringToLevel(level))
 }

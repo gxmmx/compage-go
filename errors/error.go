@@ -34,7 +34,7 @@ type AppError struct {
 }
 
 // -----------------------------------------------------------------------------
-// Public Functions
+// Methods
 // -----------------------------------------------------------------------------
 
 func (e *AppError) Error() string {
@@ -70,17 +70,11 @@ func (e *AppError) Is(target error) bool {
 }
 
 func (e *AppError) WithField(key string, value any) *AppError {
-	if e.Fields == nil {
-		e.Fields = make(map[string]any)
-	}
 	e.Fields[key] = value
 	return e
 }
 
 func (e *AppError) WithFields(fields map[string]any) *AppError {
-	if e.Fields == nil {
-		e.Fields = make(map[string]any)
-	}
 	for k, v := range fields {
 		e.Fields[k] = v
 	}

@@ -18,61 +18,50 @@ import (
 // -----------------------------------------------------------------------------
 
 type ConfigController interface {
-	Init(map[string]*pflag.Flag) []error
 	WriteConfig() error
 	GetLogLevel() string
-	GetConfig(sub string, m any) error
-	GetRawConfig() map[string]any
+	GetUnmarshalledConfig(sub string, m any) error
+	GetRaw() map[string]any
 	GetString(key string) string
 	GetInt(key string) int
 	GetBool(key string) bool
+	Set(key string, value any)
 }
 
 // -----------------------------------------------------------------------------
-// Controller
+// Concrete types
 // -----------------------------------------------------------------------------
-
-type Settings struct {
-	CnfFromCmdLine string
-	LogFromCmdLine string
-	EnvPrefix      string
-	CnfName        string
-	CnfDir         string
-	CnfType        string
-}
 
 type Controller struct {
-	settings *Settings
+	opts *Opts
 
 	config *viper.Viper
 }
 
-func NewSettings() *Settings {
-	appName := apputils.AppNameFromBin()
-	return &Settings{
-		CnfFromCmdLine: "",
-		LogFromCmdLine: "",
-		EnvPrefix:      apputils.EnvifyString(appName),
-		CnfName:        appName,
-		CnfDir:         ".",
-		CnfType:        "yaml",
-	}
-}
+// -----------------------------------------------------------------------------
+// Constructors
+// -----------------------------------------------------------------------------
 
-func NewController(settings *Settings) *Controller {
-	if settings == nil {
-		settings = NewSettings()
+func Parse(opts ...OptFunc) (*Controller, error) {
+	options := defaultOpts()
+	for _, opt := range opts {
+		opt(options)
 	}
-	return &Controller{
-		config:   viper.New(),
-		settings: settings,
+
+	ctrl := &Controller{
+		opts:   options,
+		config: viper.New(),
 	}
+
+	return ctrl.initialize()
 }
 
 // -----------------------------------------------------------------------------
-// Internal functions
+// Internal methods
 // -----------------------------------------------------------------------------
 
+// Binds passed command line flags to the config.
+// Run by initialize method.
 func (c *Controller) bindFlags(flags map[string]*pflag.Flag) error {
 	for n, f := range flags {
 		err := c.config.BindPFlag(n, f)
@@ -83,91 +72,88 @@ func (c *Controller) bindFlags(flags map[string]*pflag.Flag) error {
 	return nil
 }
 
+// Reads config from the configured sources.
+// Run by initialize method.
 func (c *Controller) readConfig() error {
 	// Read the config from a file
 	err := c.config.ReadInConfig()
-	if err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// Config file not found; ignore
-			// fmt.Println("Config file not found, using defaults")
-		} else {
-			return apperrors.Internal(err, "failed to read config file")
-		}
+	if err != nil && !isMissingConfigFileErr(err) {
+		return apperrors.Internal(err, "failed to read config file")
 	}
 
-	// Set log level from command line
-	if c.settings.LogFromCmdLine != "" {
-		// fmt.Println("Log level set from command line inside read:", c.settings.LogFromCmdLine)
-		c.config.Set("log.level", c.settings.LogFromCmdLine)
+	// Set log level if passed to controller
+	if c.opts.logLevel != "" {
+		c.config.Set("log.level", c.opts.logLevel)
 	}
 	return nil
 }
 
-// -----------------------------------------------------------------------------
-// Public functions
-// -----------------------------------------------------------------------------
+// Initialize the config controller.
+// Run when a config is parsed.
+func (c *Controller) initialize() (*Controller, error) {
+	cnfFileEnvName := fmt.Sprintf("%s_%s", c.opts.envPrefix, "CONFIG")
 
-func (c *Controller) Init(flags map[string]*pflag.Flag) error {
-	cnfFileEnvName := fmt.Sprintf("%s_%s", c.settings.EnvPrefix, apputils.EnvifyString(c.settings.CnfName))
-
-	if c.settings.CnfFromCmdLine != "" {
-		c.config.SetConfigFile(c.settings.CnfFromCmdLine)
+	// If direct path is provided, possibly from command line, use it.
+	if c.opts.cnfPath != "" {
+		c.config.SetConfigFile(c.opts.cnfPath)
 	} else if os.Getenv(cnfFileEnvName) != "" {
-		c.config.SetConfigFile(cnfFileEnvName)
+		envPath := os.Getenv(cnfFileEnvName)
+		c.config.SetConfigFile(envPath)
 	} else {
-		c.config.SetConfigName(apputils.SlugifyString(c.settings.CnfName))
-		c.config.SetConfigType(c.settings.CnfType)
-		c.config.AddConfigPath(c.settings.CnfDir)
-		if c.settings.CnfDir != "/etc" {
+		c.config.SetConfigName(apputils.SlugifyString(c.opts.cnfName))
+		c.config.SetConfigType(c.opts.cnfType)
+		c.config.AddConfigPath(c.opts.cnfDir)
+		if c.opts.cnfDir != "/etc" {
 			c.config.AddConfigPath("/etc")
 		}
-		if c.settings.CnfDir != "." {
+		if c.opts.cnfDir != "." {
 			c.config.AddConfigPath(".")
 		}
 	}
 
-	c.config.SetEnvPrefix(c.settings.EnvPrefix)
+	c.config.SetEnvPrefix(c.opts.envPrefix)
 	c.config.AutomaticEnv()
 	c.config.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 
 	c.config.SetDefault("log.level", "info")
 
-	err := c.bindFlags(flags)
+	err := c.bindFlags(c.opts.flags)
 	if err != nil {
-		return err
+		return c, err
 	}
 	err = c.readConfig()
 	if err != nil {
-		return err
+		return c, err
 	}
-	return nil
+	return c, nil
 }
 
 // -----------------------------------------------------------------------------
-// Usage functions
+// Methods
 // -----------------------------------------------------------------------------
 
+// Write the config to the configured file
 func (c *Controller) WriteConfig() error {
 	// Write the config to a file
-	file := fmt.Sprintf("%s.%s", c.settings.CnfName, c.settings.CnfType)
-	path := filepath.Join(c.settings.CnfDir, file)
+	file := fmt.Sprintf("%s.%s", c.opts.cnfName, c.opts.cnfType)
+	path := filepath.Join(c.opts.cnfDir, file)
+	if c.opts.cnfPath != "" {
+		path = c.opts.cnfPath
+	}
 	err := c.config.WriteConfigAs(path)
 	if err != nil {
-		// wrap error with message
 		return apperrors.Internal(err, "failed to write config file")
 	}
 	return nil
 }
 
+// Get the log level from the config
 func (c *Controller) GetLogLevel() string {
-	logLevel := c.config.GetString("log.level")
-	if logLevel == "" {
-		return "info"
-	}
-	return logLevel
+	return c.config.GetString("log.level")
 }
 
-func (c *Controller) GetConfig(sub string, m any) error {
+// Unmarshalls the config into the given struct
+func (c *Controller) GetConfigStruct(sub string, m any) error {
 	var cnf *viper.Viper
 	if sub == "" {
 		cnf = c.config
@@ -184,19 +170,29 @@ func (c *Controller) GetConfig(sub string, m any) error {
 	return nil
 }
 
-func (c *Controller) GetRawConfig() map[string]any {
+// Get all config values as a map
+func (c *Controller) GetRaw() map[string]any {
 	// Get the raw config
 	rawConfig := c.config.AllSettings()
 	return rawConfig
 }
 
+// Get a string value from the config
 func (c *Controller) GetString(key string) string {
 	return c.config.GetString(key)
 }
 
+// Get an int value from the config
 func (c *Controller) GetInt(key string) int {
 	return c.config.GetInt(key)
 }
+
+// Get a bool value from the config
 func (c *Controller) GetBool(key string) bool {
 	return c.config.GetBool(key)
+}
+
+// Set a value in the config
+func (c *Controller) Set(key string, value any) {
+	c.config.Set(key, value)
 }
