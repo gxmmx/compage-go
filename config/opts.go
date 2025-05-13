@@ -2,7 +2,7 @@ package config
 
 import (
 	// Compage
-	utils "github.com/gxmmx/compage-go/utils"
+	stringutils "github.com/gxmmx/compage-go/utils/stringutils"
 
 	// Third party
 	"github.com/spf13/pflag"
@@ -29,12 +29,12 @@ type Opts struct {
 // -----------------------------------------------------------------------------
 
 func defaultOpts() *Opts {
-	appName := utils.AppNameFromBin()
+	appName := stringutils.AppNameFromBin()
 	return &Opts{
 		cnfName:   appName,
 		cnfDir:    ".",
 		cnfType:   "yaml",
-		envPrefix: utils.EnvifyString(appName),
+		envPrefix: stringutils.EnvifyString(appName),
 		cnfPath:   "",
 		logLevel:  "",
 		flags:     make(map[string]*pflag.Flag),
@@ -70,7 +70,7 @@ func WithType(t string) OptFunc {
 // Sets the environment variable prefix to be used.
 func WithEnvPrefix(prefix string) OptFunc {
 	return func(opts *Opts) {
-		opts.envPrefix = utils.EnvifyString(prefix)
+		opts.envPrefix = stringutils.EnvifyString(prefix)
 	}
 }
 

@@ -2,7 +2,7 @@ package logger
 
 import (
 	// Compage
-	utils "github.com/gxmmx/compage-go/utils"
+	stringutils "github.com/gxmmx/compage-go/utils/stringutils"
 )
 
 // -----------------------------------------------------------------------------
@@ -24,7 +24,7 @@ type Opts struct {
 // -----------------------------------------------------------------------------
 
 func defaultOpts() *Opts {
-	appName := utils.AppNameFromBin()
+	appName := stringutils.AppNameFromBin()
 	return &Opts{
 		name:    appName,
 		unit:    appName,

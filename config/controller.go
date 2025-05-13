@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	apperrors "github.com/gxmmx/compage-go/errors"
-	apputils "github.com/gxmmx/compage-go/utils"
+	stringutils "github.com/gxmmx/compage-go/utils/stringutils"
 
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -100,7 +100,7 @@ func (c *Controller) initialize() (*Controller, error) {
 		envPath := os.Getenv(cnfFileEnvName)
 		c.config.SetConfigFile(envPath)
 	} else {
-		c.config.SetConfigName(apputils.SlugifyString(c.opts.cnfName))
+		c.config.SetConfigName(stringutils.SlugifyString(c.opts.cnfName))
 		c.config.SetConfigType(c.opts.cnfType)
 		c.config.AddConfigPath(c.opts.cnfDir)
 		if c.opts.cnfDir != "/etc" {

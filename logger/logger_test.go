@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	utils "github.com/gxmmx/compage-go/utils"
+	stringutils "github.com/gxmmx/compage-go/utils/stringutils"
 )
 
 // Helper to capture stdout and stderr
@@ -38,7 +38,7 @@ func capOutErr(f func()) (string, string) {
 
 func TestNew(t *testing.T) {
 	t.Run("should use defaults for out and err", func(t *testing.T) {
-		appname := utils.AppNameFromBin()
+		appname := stringutils.AppNameFromBin()
 		sout, serr := capOutErr(func() {
 			ctrl := New()
 			log := ctrl.GetLogger()
