@@ -1,0 +1,122 @@
+package utils
+
+import (
+	"bytes"
+	"crypto"
+	"crypto/ed25519"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
+	"strings"
+)
+
+// -----------------------------------------------------------------------------
+// Blocks to pem
+// -----------------------------------------------------------------------------
+
+func BlocksToString(trim, b64 bool, blocks ...*pem.Block) string {
+	// Fail fast if no blocks passed
+	if len(blocks) == 0 {
+		return ""
+	}
+	// Generate raw PEM bytes
+	var buf bytes.Buffer
+	for _, block := range blocks {
+		if block == nil {
+			continue
+		}
+		_ = pem.Encode(&buf, block)
+	}
+	out := buf.Bytes()
+	if trim {
+		out = bytes.ReplaceAll(out, []byte("\n"), []byte("\\n"))
+	}
+	if b64 {
+		return base64.StdEncoding.EncodeToString(out)
+	}
+	return string(out)
+}
+
+// -----------------------------------------------------------------------------
+// Specific types to pem
+// -----------------------------------------------------------------------------
+
+func KeyToPemString(key crypto.PrivateKey, trim, b64 bool) string {
+	if key == nil {
+		return ""
+	}
+
+	var der []byte
+	var blockType string = "PRIVATE KEY"
+
+	// Cases for supported key types
+	switch k := key.(type) {
+	case *rsa.PrivateKey, ed25519.PrivateKey:
+		der, _ = x509.MarshalPKCS8PrivateKey(k)
+	default:
+		return ""
+	}
+	// Generate raw PEM bytes
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: blockType, Bytes: der})
+	// Optionally trim newlines
+	if trim {
+		pemBytes = bytes.ReplaceAll(pemBytes, []byte("\n"), []byte("\\n"))
+	}
+	// Remove trailing newlines
+	pemBytes = bytes.TrimRight(pemBytes, "\\n\n")
+	// Optionally base64 encode
+	if b64 {
+		return base64.StdEncoding.EncodeToString(pemBytes)
+	}
+	return string(pemBytes)
+}
+
+// -----------------------------------------------------------------------------
+// Encode Csr
+// -----------------------------------------------------------------------------
+
+func CsrToPemString(csr *x509.CertificateRequest, trim, b64 bool) string {
+	if csr == nil {
+		return ""
+	}
+
+	// Generate raw PEM bytes
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr.Raw})
+	// Optionally trim newlines
+	if trim {
+		pemBytes = bytes.ReplaceAll(pemBytes, []byte("\n"), []byte("\\n"))
+	}
+	// Remove trailing newlines
+	pemBytes = bytes.TrimRight(pemBytes, "\\n\n")
+	// Optionally base64 encode
+	if b64 {
+		return base64.StdEncoding.EncodeToString(pemBytes)
+	}
+	return string(pemBytes)
+}
+
+// -----------------------------------------------------------------------------
+// Encode Certificate
+// -----------------------------------------------------------------------------
+
+func CrtToPemString(crt *x509.Certificate, trim, b64 bool) string {
+	if crt == nil {
+		return ""
+	}
+
+	// Generate raw PEM bytes
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: crt.Raw})
+	// Optionally replace newlines with literal newlines. Create single line PEM
+	if trim {
+		pemBytes = bytes.ReplaceAll(pemBytes, []byte("\n"), []byte("\\n"))
+	}
+	// Remove trailing newlines
+	pemBytes = bytes.TrimRight(pemBytes, "\\n\n")
+	// Optionally base64 encode
+	if b64 {
+		return base64.StdEncoding.EncodeToString(pemBytes)
+	}
+
+	return strings.TrimRight(string(pemBytes), "\\n\n")
+}
