@@ -1,0 +1,60 @@
+package stringutils
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+// -----------------------------------------------------------------------------
+// String functions
+// -----------------------------------------------------------------------------
+
+// Sanitizes a string for use in a slug.
+// Converts the string to lowercase and
+// replaces non-alphanumeric characters with hyphens.
+func SlugifyString(input string) string {
+	// Convert the string to lowercase
+	lower := strings.ToLower(input)
+
+	// Replace non-alphanumeric characters with single hyphens
+	re := regexp.MustCompile(`[^a-z0-9]+`)
+	slug := re.ReplaceAllString(lower, "-")
+
+	// Remove leading and trailing hyphens
+	slug = strings.Trim(slug, "-")
+
+	// Return the sanitized string
+	return slug
+}
+
+// Sanitizes a string for use in an environment variable.
+// Converts the string to uppercase and
+// replaces non-alphanumeric characters with underscores.
+func EnvifyString(input string) string {
+	// Convert the string to uppercase
+	upper := strings.ToUpper(input)
+
+	// Replace non-alphanumeric characters with single underscores
+	re := regexp.MustCompile(`[^A-Z0-9]+`)
+	env := re.ReplaceAllString(upper, "_")
+
+	// Remove leading and trailing underscores
+	env = strings.Trim(env, "_")
+
+	// Return the sanitized string
+	return env
+}
+
+// Returns sanitized app name from binary being executed
+func AppNameFromBin() string {
+	return SlugifyString(filepath.Base(os.Args[0]))
+}
+
+func EnsureLeadingSlash(s string) string {
+	if !strings.HasPrefix(s, "/") {
+		return "/" + s
+	}
+	return s
+}
