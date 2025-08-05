@@ -3,7 +3,7 @@ package config
 import (
 	"slices"
 
-	stringx "github.com/gxmmx/compage-go/utils/stringx"
+	cmpstr "github.com/gxmmx/compage-go/utils/stringx"
 	"github.com/spf13/pflag"
 )
 
@@ -72,7 +72,7 @@ func WithFlag(flag *pflag.Flag, secret bool) Option {
 		if flag == nil {
 			panic("failed to add flag: nil flag provided")
 		}
-		name := stringx.KeyifyString(flag.Name)
+		name := cmpstr.KeyifyString(flag.Name)
 		ctl.flags[name] = flag
 		if secret {
 			if !slices.Contains(ctl.secret, name) {

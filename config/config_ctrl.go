@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/viper"
 
 	cmpplt "github.com/gxmmx/compage-go/utils/platform"
-	stringx "github.com/gxmmx/compage-go/utils/stringx"
+	cmpstr "github.com/gxmmx/compage-go/utils/stringx"
 )
 
 // -----------------------------------------------------------------------------
@@ -33,6 +33,8 @@ type Controller struct {
 	secret []string
 
 	once sync.Once
+
+	parseErrors []error
 }
 
 // -----------------------------------------------------------------------------
@@ -42,15 +44,16 @@ type Controller struct {
 func New(opts ...Option) Config {
 	appName := cmpplt.BinaryName()
 	ctl := &Controller{
-		cnf:       viper.New(),
-		filecnf:   viper.New(),
-		cnfName:   appName,
-		cnfDir:    defaultCnfDir,
-		cnfType:   defaultCnfType,
-		cmfPerms:  defaultCnfPerms,
-		envPrefix: stringx.EnvifyString(appName),
-		flags:     make(map[string]*pflag.Flag),
-		secret:    []string{},
+		cnf:         viper.New(),
+		filecnf:     viper.New(),
+		cnfName:     appName,
+		cnfDir:      defaultCnfDir,
+		cnfType:     defaultCnfType,
+		cmfPerms:    defaultCnfPerms,
+		envPrefix:   cmpstr.EnvifyString(appName),
+		flags:       make(map[string]*pflag.Flag),
+		secret:      []string{},
+		parseErrors: []error{},
 	}
 
 	for _, opt := range opts {
@@ -76,4 +79,9 @@ func (ctl *Controller) Get() *viper.Viper {
 		ctl.parse()
 	})
 	return ctl.cnf
+}
+
+// GetParseErrors returns the list of errors encountered during parsing.
+func (ctl *Controller) GetParseErrors() []error {
+	return ctl.parseErrors
 }

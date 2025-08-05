@@ -93,9 +93,6 @@ func TestConfigFlags(t *testing.T) {
 		// Attempt to add an invalid nil flag
 		var flag *pflag.Flag = nil
 		cnf.Option(WithFlag(flag, false))
-
-		// // Attempt to bind the invalid flag
-		// _ = cnf.Get()
 	})
 	t.Run("ValidConfigFlags", func(t *testing.T) {
 
@@ -182,13 +179,6 @@ func TestReadConfig(t *testing.T) {
 		}
 	})
 	t.Run("ReadErrors", func(t *testing.T) {
-		// Attempt to read the config, expecting an error due to non-existent file
-		defer func() {
-			if r := recover(); r == nil {
-				t.Fatal("expected panic due to non-readable config")
-			}
-		}()
-
 		tmpDir := t.TempDir()
 		// Create a config controller with invalid path
 		cnf := New(
@@ -196,15 +186,11 @@ func TestReadConfig(t *testing.T) {
 		)
 
 		_ = cnf.Get()
+		if errs := cnf.GetParseErrors(); len(errs) == 0 {
+			t.Fatal("expected parse errors due to non-readable config")
+		}
 	})
 	t.Run("CreateErrors", func(t *testing.T) {
-		//Attempt to read the config, expecting an error due to non-existent file
-		defer func() {
-			if r := recover(); r == nil {
-				t.Fatal("expected panic due to non-existent dir")
-			}
-		}()
-
 		// Create a temporary file for testing config
 		tmpDir := t.TempDir()
 		tmpFile, _ := os.CreateTemp(tmpDir, "testconfig-*.yaml")
@@ -218,14 +204,11 @@ func TestReadConfig(t *testing.T) {
 		)
 
 		_ = cnf.Get()
+		if errs := cnf.GetParseErrors(); len(errs) == 0 {
+			t.Fatal("expected parse errors due to non-readable config")
+		}
 	})
 	t.Run("SetPermissionErrors", func(t *testing.T) {
-		//Attempt to set file permissions, expecting an error due to invalid perms
-		defer func() {
-			if r := recover(); r == nil {
-				t.Fatal("expected panic due to non-existent dir")
-			}
-		}()
 		// Overwrite the os.Chmod function to simulate permission errors
 		osChmodFunc = func(path string, mode os.FileMode) error {
 			return &os.PathError{Op: "chmod", Path: path, Err: os.ErrPermission}
@@ -245,5 +228,8 @@ func TestReadConfig(t *testing.T) {
 		)
 
 		_ = cnf.Get()
+		if errs := cnf.GetParseErrors(); len(errs) == 0 {
+			t.Fatal("expected parse errors due to non-readable config")
+		}
 	})
 }

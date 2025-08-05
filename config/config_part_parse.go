@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	cmperr "github.com/gxmmx/compage-go/errors"
+
 	"github.com/spf13/viper"
 )
 
@@ -47,8 +49,8 @@ func (ctl *Controller) parse() {
 	// Add flags
 	for n, f := range ctl.flags {
 		_ = ctl.cnf.BindPFlag(n, f)
-		// No need checking for error,
-		// as WithFlag already checks for nil, when assigning name
+		// Unnecessary to check for errors here,
+		// as we already checked for errors in the WithFlag definition.
 	}
 
 	// Read config
@@ -56,7 +58,7 @@ func (ctl *Controller) parse() {
 	var notFoundErr viper.ConfigFileNotFoundError
 	var pathErr *fs.PathError
 	if err != nil && !errors.As(err, &notFoundErr) && !errors.As(err, &pathErr) {
-		panic(fmt.Sprintf("failed to read config: %v", err))
+		ctl.parseErrors = append(ctl.parseErrors, cmperr.New(cmperr.KindCorruptedData, "config-file", "failed to read config file", err))
 	}
 
 	// Safe write config if not exists
@@ -67,10 +69,11 @@ func (ctl *Controller) parse() {
 		}
 		if !cnfExists {
 			if err := ctl.cnf.SafeWriteConfigAs(ctl.cnfCurrentPath); err != nil {
-				panic(fmt.Sprintf("failed to write config file: %v", err))
-			}
-			if err := osChmodFunc(ctl.cnfCurrentPath, ctl.cmfPerms); err != nil {
-				panic(fmt.Sprintf("failed to set permissions on config file: %v", err))
+				ctl.parseErrors = append(ctl.parseErrors, cmperr.New(cmperr.KindInternal, "config-file", "failed to write config file", err))
+			} else {
+				if err := osChmodFunc(ctl.cnfCurrentPath, ctl.cmfPerms); err != nil {
+					ctl.parseErrors = append(ctl.parseErrors, cmperr.New(cmperr.KindInternal, "config-file", "failed to set permissions on config file", err))
+				}
 			}
 		}
 	}
