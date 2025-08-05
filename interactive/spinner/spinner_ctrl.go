@@ -10,7 +10,7 @@ import (
 	"time"
 
 	cmplog "github.com/gxmmx/compage-go/logger"
-	cmpstyle "github.com/gxmmx/compage-go/style"
+	cmpstl "github.com/gxmmx/compage-go/style"
 
 	"golang.org/x/term"
 )
@@ -122,7 +122,7 @@ func (ctl *Controller) loop() {
 		case <-ticker.C:
 			if ctl.isTTY {
 				ctl.mutex.Lock()
-				fmt.Fprintf(ctl.writer, "\r%s%s %s", ctl.prefix, cmpstyle.Color(ctl.sColor).Apply(string(frames[i%len(frames)])), cmpstyle.Color(ctl.mColor).Apply(ctl.msg))
+				fmt.Fprintf(ctl.writer, "\r%s%s %s", ctl.prefix, cmpstl.Color(ctl.sColor).Apply(string(frames[i%len(frames)])), cmpstl.Color(ctl.mColor).Apply(ctl.msg))
 				ctl.mutex.Unlock()
 				i++
 			}

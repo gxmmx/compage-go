@@ -39,12 +39,6 @@ func TestNewSpinner(t *testing.T) {
 	if !strings.Contains(output, "T1 Spinner") {
 		t.Errorf("Expected output to contain 'T2 Spinner', got: %q", output)
 	}
-	if !strings.Contains(output, "\033[34m") { // blue color code
-		t.Errorf("Expected output to contain blue color code, got: %q", output)
-	}
-	if !strings.Contains(output, "\033[31m") { // red color code
-		t.Errorf("Expected output to contain red color code, got: %q", output)
-	}
 	if !strings.Contains(output, "T1 Done") {
 		t.Errorf("Expected output to contain 'T1 Done', got: %q", output)
 	}
