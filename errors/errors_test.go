@@ -55,8 +55,8 @@ func TestNewErrorAppErrorSub(t *testing.T) {
 		t.Errorf("expected 3 fields, got %d", len(err.Fields()))
 	}
 
-	if !strings.Contains(err.Caller(), "ctrl_test.go:") {
-		t.Errorf("expected caller to contain 'ctrl_test.go:', got %s", err.Caller())
+	if !strings.Contains(err.Caller(), "errors_test.go:") {
+		t.Errorf("expected caller to contain 'errors_test.go:', got %s", err.Caller())
 	}
 }
 

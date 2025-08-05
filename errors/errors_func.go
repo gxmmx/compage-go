@@ -4,6 +4,42 @@ package errors
 // Functions
 // -----------------------------------------------------------------------------
 
+func IsAppError(err error) bool {
+	depth := 0
+	for err != nil && depth < maxChainDepth {
+		if _, ok := err.(ApplicationError); ok {
+			return true
+		}
+		if unwrapper, ok := err.(interface{ Unwrap() error }); ok {
+			err = unwrapper.Unwrap()
+		} else {
+			break
+		}
+		depth++
+	}
+	return false
+}
+
+func IsOfKindClass(err error, kind Kind, class string) bool {
+	depth := 0
+	for err != nil && depth < maxChainDepth {
+		if ae, ok := err.(interface{ IsKind(Kind) bool }); ok {
+			if ae.IsKind(kind) {
+				if ace, ok := err.(interface{ IsClass(string) bool }); ok {
+					return ace.IsClass(class)
+				}
+			}
+		}
+		if unwrapper, ok := err.(interface{ Unwrap() error }); ok {
+			err = unwrapper.Unwrap()
+		} else {
+			break
+		}
+		depth++
+	}
+	return false
+}
+
 func IsOfKind(err error, kind Kind) bool {
 	depth := 0
 	for err != nil && depth < maxChainDepth {
