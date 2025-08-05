@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/gxmmx/compage-go/config"
 	"github.com/spf13/cobra"
 )
 
@@ -14,14 +16,10 @@ import (
 type CliCommandFunc func(cli CliContext) error
 
 type CliCommand interface {
-	// Usage(string)
-	// Short(string)
-	// Long(string)
-	// Example(string)
-
-	// AddConf()
-	AddFlag(string, string, any, string)
-	AddCommand(string, string, string, CliCommandFunc) CliCommand
+	App(name string)
+	AddFlag(long string, short string, def any, help string, secret bool)
+	AddArg(name string, required bool, multi bool)
+	AddCommand(name string, short string, long string, f CliCommandFunc) CliCommand
 }
 
 // -----------------------------------------------------------------------------
@@ -29,21 +27,39 @@ type CliCommand interface {
 // -----------------------------------------------------------------------------
 
 type CliCommandController struct {
-	cli *CliController
-	cmd *cobra.Command
-	grp []string
+	name string
+	cli  *CliController
+	cmd  *cobra.Command
+	grp  []string
+	args []cliArg
+}
+
+type cliArg struct {
+	name     string
+	required bool
+	multi    bool
 }
 
 // -----------------------------------------------------------------------------
 // Cli Command methods
 // -----------------------------------------------------------------------------
 
-func (cc *CliCommandController) AddFlag(long string, short string, def any, help string) {
-	addFlag(cc, long, short, def, help, false)
+func (cc *CliCommandController) App(name string) {
+	if name == "" {
+		name = "app"
+	}
+}
+
+func (cc *CliCommandController) AddFlag(long string, short string, def any, help string, secret bool) {
+	addFlag(cc, long, short, def, help, secret, false)
+}
+
+func (cc *CliCommandController) AddArg(name string, required bool, multi bool) {
+	addArg(cc, name, required, multi)
 }
 
 func (cc *CliCommandController) AddCommand(name string, short string, long string, f CliCommandFunc) CliCommand {
-	return addCommand(cc, name, "", "", f)
+	return addCommand(cc, name, short, long, f)
 }
 
 // -----------------------------------------------------------------------------
@@ -88,23 +104,27 @@ func addCommand(c *CliCommandController, name string, short string, long string,
 	n, g := c.handleGroup(name)
 
 	command := &CliCommandController{
-		cli: c.cli,
+		name: n,
+		cli:  c.cli,
 		cmd: &cobra.Command{
-			Use:   n,
-			Short: short,
-			Long:  long,
-			RunE: func(cmd *cobra.Command, args []string) error {
-				return f(c.cli)
-			},
+			Use:     n,
+			Short:   short,
+			Long:    long,
 			GroupID: g,
+			Args:    cobra.NoArgs,
 		},
+	}
+	if f != nil {
+		command.cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			return f(c.cli)
+		}
 	}
 	c.cmd.AddCommand(command.cmd)
 	return command
 }
 
 // Adds a persistent flag and configuration option to a command controller
-func addFlag(c *CliCommandController, long string, short string, def any, help string, hide bool) {
+func addFlag(c *CliCommandController, long string, short string, def any, help string, secret bool, hide bool) {
 	// Skip if flag name is empty
 	if long == "" {
 		return
@@ -144,6 +164,55 @@ func addFlag(c *CliCommandController, long string, short string, def any, help s
 	}
 	// If the flag is valid, add it to the config controller
 	if flagIsValid {
-		c.cli.cfgctl.AddFlag(c.cmd.Flags().Lookup(long))
+		c.cli.cfg.Option(config.WithFlag(c.cmd.Flags().Lookup(long), secret))
 	}
 }
+
+func addArg(c *CliCommandController, name string, required bool, multi bool) {
+	if name == "" {
+		return
+	}
+	for _, arg := range c.args {
+		if arg.name == name {
+			return // Argument already exists
+		}
+		if multi && arg.multi {
+			return // Only one argument can have multiple values
+		}
+		if required && !arg.required {
+			return // Cannot add a required argument after an optional one
+		}
+	}
+
+	// append the new argument
+	c.args = append(c.args, cliArg{name: name, required: required, multi: multi})
+	usage := c.name
+	requiredArgs := 0
+	optionalArgs := 0
+	haveMulti := false
+	for _, arg := range c.args {
+		if arg.multi {
+			usage += fmt.Sprintf(" [<%s>]...", arg.name)
+			haveMulti = true
+		} else if arg.required {
+			usage += fmt.Sprintf(" <%s>", arg.name)
+		} else {
+			usage += fmt.Sprintf(" [<%s>]", arg.name)
+		}
+		if arg.required {
+			requiredArgs++
+		} else {
+			optionalArgs++
+		}
+	}
+	c.cmd.Use = usage
+	if haveMulti {
+		c.cmd.Args = cobra.ArbitraryArgs
+	} else if optionalArgs == 0 {
+		c.cmd.Args = cobra.ExactArgs(requiredArgs)
+	} else {
+		c.cmd.Args = cobra.RangeArgs(requiredArgs, requiredArgs+optionalArgs)
+	}
+}
+
+// func addCtx
