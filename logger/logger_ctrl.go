@@ -4,6 +4,8 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+
+	cmperr "github.com/gxmmx/compage-go/errors"
 )
 
 // -----------------------------------------------------------------------------
@@ -11,12 +13,13 @@ import (
 // -----------------------------------------------------------------------------
 
 type Controller struct {
-	app       string
-	level     *slog.LevelVar
-	logger    *slog.Logger
-	outWriter io.Writer
-	errWriter io.Writer
-	once      sync.Once
+	app         string
+	level       *slog.LevelVar
+	logger      *slog.Logger
+	outWriter   io.Writer
+	errWriter   io.Writer
+	once        sync.Once
+	preWarnings []error
 }
 
 // -----------------------------------------------------------------------------
@@ -26,10 +29,11 @@ type Controller struct {
 // Creates a new logger controller with the specified options.
 func New(opts ...Option) Logger {
 	ctl := &Controller{
-		level:     new(slog.LevelVar),
-		outWriter: defaultOutWriter,
-		errWriter: defaultErrWriter,
-		app:       "",
+		level:       new(slog.LevelVar),
+		outWriter:   defaultOutWriter,
+		errWriter:   defaultErrWriter,
+		app:         "",
+		preWarnings: []error{},
 	}
 	ctl.level.Set(slog.LevelInfo)
 
@@ -63,6 +67,17 @@ func (ctl *Controller) Get() *slog.Logger {
 			ctl.newCliLogger()
 		} else {
 			ctl.newAppLogger()
+		}
+		// Log pre-warnings if any
+		if len(ctl.preWarnings) > 0 {
+			for _, err := range ctl.preWarnings {
+				if aerr, ok := err.(cmperr.ApplicationError); ok {
+					msg, fields := aerr.Slog()
+					ctl.logger.Warn(msg, fields...)
+				} else {
+					ctl.logger.Warn(err.Error())
+				}
+			}
 		}
 	})
 	return ctl.logger

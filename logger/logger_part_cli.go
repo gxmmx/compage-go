@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
-	cmpstyle "github.com/gxmmx/compage-go/style"
+	cmpstl "github.com/gxmmx/compage-go/style"
 )
 
 // -----------------------------------------------------------------------------
@@ -115,13 +115,13 @@ func (h *cliHandler) Handle(_ context.Context, r slog.Record) error {
 
 	indentation := strings.Repeat(IndentString, indent)
 
-	fmt.Fprintf(out, "%s\n", cmpstyle.Apply(indentation+msg, style))
+	fmt.Fprintf(out, "%s\n", cmpstl.Apply(indentation+msg, style))
 
 	// Dump extra attributes
 	for _, a := range extraAttrs {
 		a.Value = a.Value.Resolve()
 		argline := fmt.Sprintf("%s%s: %v", indentation+IndentString, a.Key, a.Value.Any())
-		fmt.Fprintf(out, "%s\n", cmpstyle.Apply(argline, style))
+		fmt.Fprintf(out, "%s\n", cmpstl.Apply(argline, style))
 	}
 
 	return nil

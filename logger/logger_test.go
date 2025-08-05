@@ -2,8 +2,11 @@ package logger
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
 	"testing"
+
+	cmperr "github.com/gxmmx/compage-go/errors"
 )
 
 func TestNewLogger(t *testing.T) {
@@ -53,5 +56,31 @@ func TestSetOptions(t *testing.T) {
 	}
 	if logger.level.Level() != slog.LevelDebug {
 		t.Errorf("Expected level to be 'debug', got %s", logger.level.String())
+	}
+}
+
+func TestLoggerPreWarnings(t *testing.T) {
+	ow := &bytes.Buffer{}
+	ew := &bytes.Buffer{}
+	loggerInterface := New(
+		WithOutWriter(ow),
+		WithErrWriter(ew),
+		WithPreWarning(fmt.Errorf("Test pre-warning 1")),
+		WithPreWarning(cmperr.NewAlreadyExists("Test pre-warning 2", nil)),
+	)
+	// Get controller from interface
+	logger, _ := loggerInterface.(*Controller)
+
+	if len(logger.preWarnings) != 2 {
+		t.Fatalf("Expected 2 pre-warnings, got %d", len(logger.preWarnings))
+	}
+
+	_ = logger.Get() // Trigger logger initialization
+
+	if !bytes.Contains(ew.Bytes(), []byte("Test pre-warning 1")) {
+		t.Error("Expected pre-warning 'Test pre-warning 1' to be logged")
+	}
+	if !bytes.Contains(ew.Bytes(), []byte("Test pre-warning 2")) {
+		t.Error("Expected pre-warning 'Test pre-warning 2' to be logged")
 	}
 }

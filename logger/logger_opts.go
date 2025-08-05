@@ -41,3 +41,10 @@ func WithErrWriter(w io.Writer) Option {
 		ctl.errWriter = w
 	}
 }
+
+// Adds a pre-warning to the controller. These warnings are logged on first get of logger.
+func WithPreWarning(err error) Option {
+	return func(ctl *Controller) {
+		ctl.preWarnings = append(ctl.preWarnings, err)
+	}
+}
