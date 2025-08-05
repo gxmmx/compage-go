@@ -1,8 +1,6 @@
-package stringutils
+package stringx
 
 import (
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -47,9 +45,33 @@ func EnvifyString(input string) string {
 	return env
 }
 
-// Returns sanitized app name from binary being executed
-func AppNameFromBin() string {
-	return SlugifyString(filepath.Base(os.Args[0]))
+// Sanitizes a string for use as a key.
+// Converts the string to lowercase and
+// replaces non-alphanumeric characters with dots.
+func KeyifyString(input string) string {
+	// Convert the string to lowercase
+	lower := strings.ToLower(input)
+
+	// Replace non-alphanumeric characters with underscores
+	re := regexp.MustCompile(`[^a-z0-9]+`)
+	key := re.ReplaceAllString(lower, ".")
+
+	// Remove leading and trailing separators
+	key = strings.Trim(key, ".")
+
+	// Return the sanitized string
+	return key
+}
+
+func StripPrefix(input string, prefix string) string {
+	if !strings.HasPrefix(input, prefix) {
+		return input
+	}
+	str := strings.TrimPrefix(input, prefix)
+	str = strings.TrimPrefix(str, "_")
+	str = strings.TrimPrefix(str, "-")
+	str = strings.TrimPrefix(str, ".")
+	return str
 }
 
 func EnsureLeadingSlash(s string) string {

@@ -1,7 +1,6 @@
-package stringutils
+package stringx
 
 import (
-	"os"
 	"testing"
 )
 
@@ -43,18 +42,46 @@ func TestEnvifyString(t *testing.T) {
 	}
 }
 
-func TestAppNameFromBin(t *testing.T) {
-	// Mock os.Args[0]
-	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
+func TestKeyifyString(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"Hello World!!", "hello.world"},
+		{"GoLang !!101", "golang.101"},
+		{"Test@123", "test.123"},
+		{"  Spaces   and   $omething", "spaces.and.omething"},
+	}
 
-	mockArgs := []string{"/path/to/mock-binary"}
-	os.Args = mockArgs
+	for _, test := range tests {
+		result := KeyifyString(test.input)
+		if result != test.expected {
+			t.Errorf("KeyifyString(%q) = %q; expected %q", test.input, result, test.expected)
+		}
+	}
+}
 
-	expected := "mock-binary"
-	binName := AppNameFromBin()
-	if binName != expected {
-		t.Errorf("AppNameFromBin() = %q; expected %q", binName, expected)
+func TestStripPrefix(t *testing.T) {
+	tests := []struct {
+		input    string
+		prefix   string
+		expected string
+	}{
+		{"prefix_value", "prefix_", "value"},
+		{"prefix.value", "prefix", "value"},
+		{"value", "prefix_", "value"},
+		{"value", "prefix", "value"},
+		{"_value", "prefix", "_value"},
+		{"-value", "prefix", "-value"},
+		{".value", "prefix", ".value"},
+		{"prefixvalue", "prefix", "value"},
+	}
+
+	for _, test := range tests {
+		result := StripPrefix(test.input, test.prefix)
+		if result != test.expected {
+			t.Errorf("StripPrefix(%q, %q) = %q; expected %q", test.input, test.prefix, result, test.expected)
+		}
 	}
 }
 
