@@ -57,8 +57,13 @@ func (ctl *Controller) parse() {
 	err := ctl.cnf.ReadInConfig()
 	var notFoundErr viper.ConfigFileNotFoundError
 	var pathErr *fs.PathError
-	if err != nil && !errors.As(err, &notFoundErr) && !errors.As(err, &pathErr) {
-		ctl.parseErrors = append(ctl.parseErrors, cmperr.New(cmperr.KindCorruptedData, "config-file", "failed to read config file", err))
+	if err != nil {
+		if errors.As(err, &notFoundErr) || errors.As(err, &pathErr) {
+			// This is expected, do nothing
+		} else {
+			ctl.parseErrors = append(ctl.parseErrors,
+				cmperr.New(cmperr.KindCorruptedData, "config-file", "failed to read config file", err))
+		}
 	}
 
 	// Safe write config if not exists

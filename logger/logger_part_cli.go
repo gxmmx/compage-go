@@ -108,6 +108,10 @@ func (h *cliHandler) Handle(_ context.Context, r slog.Record) error {
 			if v, ok := a.Value.Any().(string); ok {
 				style = v
 			}
+		case "error":
+			if !strings.HasPrefix(msg, "Error: ") {
+				msg = "Error: " + msg
+			}
 		default:
 			extraAttrs = append(extraAttrs, a)
 		}

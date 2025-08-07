@@ -10,12 +10,13 @@ import (
 // -----------------------------------------------------------------------------
 
 type Controller struct {
-	kind   Kind
-	class  string
-	msg    string
-	err    error
-	fields map[string]any
-	caller string
+	kind     Kind
+	class    string
+	msg      string
+	err      error
+	fields   map[string]any
+	caller   string
+	exitcode int
 }
 
 // -----------------------------------------------------------------------------
@@ -29,12 +30,13 @@ func New(kind Kind, class string, message string, err error) ApplicationError {
 		caller = fmt.Sprintf("%s:%d", file, line)
 	}
 	appErr := &Controller{
-		kind:   kind,
-		class:  class,
-		msg:    message,
-		err:    err,
-		fields: make(map[string]any),
-		caller: caller,
+		kind:     kind,
+		class:    class,
+		msg:      message,
+		err:      err,
+		fields:   make(map[string]any),
+		caller:   caller,
+		exitcode: defaultExitCode,
 	}
 	if err == nil {
 		return appErr
@@ -100,6 +102,10 @@ func (ctl *Controller) Caller() string {
 	return ctl.caller
 }
 
+func (ctl *Controller) ExitCode() int {
+	return ctl.exitcode
+}
+
 func (ctl *Controller) Fields() map[string]any {
 	merged := make(map[string]any)
 	current := ctl
@@ -149,5 +155,10 @@ func (ctl *Controller) WithFields(fields map[string]any) ApplicationError {
 	for k, v := range fields {
 		ctl.fields[k] = v
 	}
+	return ctl
+}
+
+func (ctl *Controller) WithExitCode(c int) ApplicationError {
+	ctl.exitcode = c
 	return ctl
 }

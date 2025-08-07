@@ -101,3 +101,17 @@ func TestErrorMaxDepth(t *testing.T) {
 		t.Error("expected error chain to indicate max depth reached")
 	}
 }
+
+func TestErrorExitCode(t *testing.T) {
+	err := New(KindInternal, "ComponentFailure", "newerror", nil).WithExitCode(42)
+
+	if err.ExitCode() != 42 {
+		t.Errorf("expected exit code 42, got %d", err.ExitCode())
+	}
+
+	err = New(KindInternal, "ComponentFailure", "newerror", nil)
+
+	if err.ExitCode() != defaultExitCode {
+		t.Errorf("expected default exit code %d, got %d", defaultExitCode, err.ExitCode())
+	}
+}

@@ -11,6 +11,8 @@ type ApplicationError interface {
 	Chain() string
 	// Returns the error caller file:line
 	Caller() string
+	// Returns the exit code
+	ExitCode() int
 	// Returns a map of error fields
 	Fields() map[string]any
 	// Returns the next nested error
@@ -29,6 +31,8 @@ type ApplicationError interface {
 	WithField(key string, value any) ApplicationError
 	// Adds multiple fields to the error
 	WithFields(fields map[string]any) ApplicationError
+	// Adds an exit code to the error
+	WithExitCode(code int) ApplicationError
 
 	// Returns the fields need to log as an slog message
 	// Call example:

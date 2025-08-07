@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -232,4 +233,145 @@ func TestReadConfig(t *testing.T) {
 			t.Fatal("expected parse errors due to non-readable config")
 		}
 	})
+}
+
+func TestGetRedacted(t *testing.T) {
+	t.Run("GetRedactedValue", func(t *testing.T) {
+		testCobraCommand := &cobra.Command{}
+		testCobraCommand.Flags().String("test-flag1", "visible", "test flag 1")
+		testCobraCommand.Flags().String("test-flag2", "hidden", "test flag 2")
+		flag1 := testCobraCommand.Flags().Lookup("test-flag1")
+		flag2 := testCobraCommand.Flags().Lookup("test-flag2")
+		cnf := New(
+			WithFlag(flag1, false),
+			WithFlag(flag2, true),
+		)
+		config := cnf.Get()
+		if config == nil {
+			t.Fatal("expected non-nil config")
+		}
+		cnfctl := cnf.(*Controller)
+		val1, _ := cnfctl.GetRedactedValue("test.flag1")
+		val2, _ := cnfctl.GetRedactedValue("test.flag2")
+		val3, _ := cnfctl.GetRedactedValue("test.flag3") // Non-existent key
+
+		if val1 != "visible" {
+			t.Errorf("expected 'visible', got '%s'", val1)
+		}
+		if val2 != "<redacted>" {
+			t.Errorf("expected '<redacted>', got '%s'", val2)
+		}
+		if val3 != "" {
+			t.Errorf("expected '', got '%s'", val3)
+		}
+	})
+	t.Run("GetRedactedMap", func(t *testing.T) {
+		testCobraCommand := &cobra.Command{}
+		testCobraCommand.Flags().String("test-flag1", "visible", "test flag 1")
+		testCobraCommand.Flags().String("test-flag2", "hidden", "test flag 2")
+		flag1 := testCobraCommand.Flags().Lookup("test-flag1")
+		flag2 := testCobraCommand.Flags().Lookup("test-flag2")
+		cnf := New(
+			WithFlag(flag1, false),
+			WithFlag(flag2, true),
+		)
+		config := cnf.Get()
+		if config == nil {
+			t.Fatal("expected non-nil config")
+		}
+		cnfctl := cnf.(*Controller)
+		resultMap := cnfctl.GetRedactedMap()
+
+		expectedMap := map[string]interface{}{
+			"test": map[string]interface{}{
+				"flag1": "visible",
+				"flag2": "<redacted>",
+			},
+		}
+
+		if !reflect.DeepEqual(resultMap, expectedMap) {
+			t.Errorf("expected %v, got %v", expectedMap, resultMap)
+		}
+	})
+}
+
+func TestGetEnvPrefix(t *testing.T) {
+	t.Run("GetEnvPrefix", func(t *testing.T) {
+		cnf := New(
+			WithEnvPrefix("TEST"),
+		)
+		cnfctl := cnf.(*Controller)
+		prefix := cnfctl.GetEnvPrefix()
+		if prefix != "TEST" {
+			t.Errorf("expected 'TEST', got '%s'", prefix)
+		}
+	})
+}
+
+func TestSaveConfig(t *testing.T) {
+	// Create a temporary file for testing config
+	tmpDir := t.TempDir()
+	tmpFile, _ := os.CreateTemp(tmpDir, "testconfig-*.yaml")
+	os.Remove(tmpFile.Name()) // Remove before, to simulate non-existence
+	defer os.Remove(tmpFile.Name())
+
+	testCobraCommand := &cobra.Command{}
+	testCobraCommand.Flags().String("test-flag1", "value1", "test flag 1")
+	testCobraCommand.Flags().String("test-flag2", "value2", "test flag 2")
+	flag1 := testCobraCommand.Flags().Lookup("test-flag1")
+	flag2 := testCobraCommand.Flags().Lookup("test-flag2")
+
+	// Create a config controller
+	cnf := New(
+		WithFilePath(tmpFile.Name()),
+		WithCreateConfig(false),
+		WithFlag(flag1, false),
+		WithFlag(flag2, false),
+	)
+	// Try to save a non-existent key
+	if err := cnf.Save("test.flag3", "value"); err == nil {
+		t.Fatal("expected error when saving non-existent key")
+	}
+	// Save a valid key
+	if err := cnf.Save("test.flag1", "value3"); err != nil {
+		t.Fatalf("failed to save config: %v", err)
+	}
+
+	// Get the config again to verify
+	config := cnf.Get()
+	if config == nil {
+		t.Fatal("expected non-nil config")
+	}
+	if config.GetString("test.flag1") != "value3" {
+		t.Errorf("expected 'value3', got '%s'", config.GetString("test.flag1"))
+	}
+
+	// Check if config file exists
+	if _, err := os.Stat(tmpFile.Name()); os.IsNotExist(err) {
+		t.Fatalf("expected config file to be created at %s", tmpFile.Name())
+	}
+	// Read the config file to verify the saved value
+	data, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("failed to read config file: %v", err)
+	}
+	if !strings.Contains(string(data), "value3") {
+		t.Errorf("expected config file to contain 'value3', got '%s'", string(data))
+	}
+	if !strings.Contains(string(data), "value2") {
+		t.Errorf("expected config file to contain 'value2', got '%s'", string(data))
+	}
+	// Verify that the value is updated in memory
+	if config.GetString("test.flag1") != "value3" {
+		t.Errorf("expected in-memory config to be updated to 'value3', got '%s'", config.GetString("test.flag1"))
+	}
+
+	// Set invalid permissions to test error handling
+	if err := os.Chmod(tmpFile.Name(), 0444); err != nil {
+		t.Fatalf("failed to set permissions on config file: %v", err)
+	}
+	// Try to save again, expecting an error due to permissions
+	if err := cnf.Save("test.flag1", "value4"); err == nil {
+		t.Fatal("expected error when saving config with invalid permissions")
+	}
 }

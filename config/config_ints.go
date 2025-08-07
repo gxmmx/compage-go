@@ -13,4 +13,6 @@ type Config interface {
 	Get() *viper.Viper
 	// Get the parse errors encountered during config parsing.
 	GetParseErrors() []error
+	// Save a configuration key value pair.
+	Save(key string, value any) error
 }
