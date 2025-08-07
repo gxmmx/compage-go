@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"io"
+
 	cmpcfg "github.com/gxmmx/compage-go/config"
+	"github.com/gxmmx/compage-go/logger"
 	cmpstx "github.com/gxmmx/compage-go/utils/stringx"
 )
 
@@ -100,6 +103,30 @@ func WithConfigCreate(sensitive bool) Option {
 // Enables default config management commands.
 func WithConfigCommands() Option {
 	return func(ctl *Controller) {
-		ctl.cmdConfig = true
+		ctl.addConfigCmds = true
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Testing overrides
+// -----------------------------------------------------------------------------
+
+// Sets output writer for the logger.
+func withOutWriter(w io.Writer) Option {
+	return func(ctl *Controller) {
+		ctl.log.Option(logger.WithOutWriter(w))
+	}
+}
+
+// Sets error writer for the logger.
+func withErrWriter(w io.Writer) Option {
+	return func(ctl *Controller) {
+		ctl.log.Option(logger.WithErrWriter(w))
+	}
+}
+
+func withArgs(args []string) Option {
+	return func(ctl *Controller) {
+		ctl.cliArgs = args
 	}
 }

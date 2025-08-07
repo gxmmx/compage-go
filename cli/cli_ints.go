@@ -20,8 +20,10 @@ type Cli interface {
 	AddFlag(long string, short string, def any, help string, secret bool)
 	// Add a command to the cli.
 	AddCommand(name string, short string, long string, f CliCommandFunc) CliCommand
+	// Set the root command function.
+	SetRootCommand(f CliCommandFunc)
 	// Execute the cli command.
-	Execute()
+	Execute() (exitCode int)
 }
 
 type CliCommand interface {
@@ -35,11 +37,13 @@ type CliCommand interface {
 
 type CliContext interface {
 	// Get the command line arguments.
-	Args() []string
+	GetArgs() []string
 	// Get the context of the command.
-	Context() context.Context
-	// Get the configuration.
-	Config() *viper.Viper
+	GetContext() context.Context
 	// Get the logger.
-	Logger() *slog.Logger
+	GetLogger() *slog.Logger
+	// Get configuration.
+	GetConfig() *viper.Viper
+	// Save a configuration key value pair.
+	SaveConfig(key string, value any) error
 }

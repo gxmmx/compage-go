@@ -30,11 +30,14 @@ type Controller struct {
 	log  cmplog.Logger
 
 	// Default commands
-	cmdConfig bool
+	addConfigCmds bool
 
-	// Called command & args
-	ccmd *cobra.Command
-	args []string
+	// Currently executed command
+	cmdCmd *cobra.Command
+	// Args passed to the CLI
+	cliArgs []string
+	// Args passed with the current command
+	cmdArgs []string
 }
 
 type CommandController struct {
@@ -68,7 +71,8 @@ func New(opts ...Option) Cli {
 	ctl.root.cmd.Short = "Compage Application"
 	ctl.root.cmd.Long = "App built using the Compage framework."
 
-	ctl.args = []string{}
+	ctl.cliArgs = os.Args[1:]
+	ctl.cmdArgs = []string{}
 
 	ctl.bootstrapOnCreate()
 
@@ -82,24 +86,32 @@ func New(opts ...Option) Cli {
 // Cli Execution
 // -----------------------------------------------------------------------------
 
-func (c *Controller) Execute() {
+func (ctl *Controller) Execute() (exitCode int) {
+	// Handle panics gracefully
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("Recovered from panic: %v\n", r)
-			os.Exit(1)
+			fmt.Printf("Panic: %v\n", r)
+			exitCode = panicExitCode
 		}
 	}()
 
-	c.bootstrapOnExecute()
+	// Bootstrap the CLI
+	ctl.bootstrapOnExecute()
+	// Get the command to execute, if not runnable, show usage
+	cmd := ctl.getCmdFromPassedArgs()
 
-	if err := c.root.cmd.Execute(); err != nil {
-		if aerr, ok := err.(cmperr.ApplicationError); ok {
-			msg, fields := aerr.Slog()
-			c.log.Get().Error(msg, fields...)
-		} else {
-			c.log.Get().Error(err.Error())
-		}
+	// Return if not runnable
+	runnable := ctl.isRunnable(cmd)
+	if !runnable {
+		exitCode = 0
+		return
 	}
+
+	// Run the CLI
+	err := ctl.root.cmd.Execute()
+	// Set exit code based on error
+	exitCode = ctl.handleError(cmd, err)
+	return
 }
 
 // -----------------------------------------------------------------------------
@@ -124,6 +136,14 @@ func (ctl *Controller) AddCommand(name string, short string, long string, f CliC
 	return addCommand(ctl.root, name, short, long, f)
 }
 
+func (ctl *Controller) SetRootCommand(f CliCommandFunc) {
+	if f != nil {
+		ctl.root.cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			return f(ctl)
+		}
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Cli Command methods
 // -----------------------------------------------------------------------------
@@ -144,20 +164,25 @@ func (cc *CommandController) AddCommand(name string, short string, long string, 
 // Cli Context methods
 // -----------------------------------------------------------------------------
 
-func (ctl *Controller) Args() []string {
-	return ctl.args
+func (ctl *Controller) GetArgs() []string {
+	return ctl.cmdArgs
 }
 
-func (ctl *Controller) Context() context.Context {
+func (ctl *Controller) GetContext() context.Context {
 	return context.Background()
 }
 
-func (ctl *Controller) Config() *viper.Viper {
+func (ctl *Controller) GetLogger() *slog.Logger {
+	return ctl.log.Get()
+}
+
+func (ctl *Controller) GetConfig() *viper.Viper {
 	return ctl.cfg.Get()
 }
 
-func (ctl *Controller) Logger() *slog.Logger {
-	return ctl.log.Get()
+func (ctl *Controller) SaveConfig(key string, value any) error {
+	// Todo
+	return nil
 }
 
 // -----------------------------------------------------------------------------
@@ -179,8 +204,9 @@ func (ctl *Controller) bootstrapOnCreate() {
 	ctl.root.cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		return ctl.bootstrapOnPreCommand(cmd, args)
 	}
-
-	// ctl.root.cmd.SilenceErrors = true
+	// Silence usage and errors, will be handled in Execute
+	ctl.root.cmd.SilenceErrors = true
+	ctl.root.cmd.SilenceUsage = true
 }
 
 func (ctl *Controller) bootstrapOnExecute() {
@@ -188,15 +214,17 @@ func (ctl *Controller) bootstrapOnExecute() {
 	_, helpGroup := ensureCommandGroup(ctl.root, "system:system")
 	ctl.root.cmd.SetCompletionCommandGroupID(helpGroup)
 	ctl.root.cmd.SetHelpCommandGroupID(helpGroup)
-	if ctl.cmdConfig {
+	if ctl.addConfigCmds {
 		ctl.addConfigCommands()
 	}
+	// Set cli arguments
+	ctl.root.cmd.SetArgs(ctl.cliArgs)
 }
 
 func (ctl *Controller) bootstrapOnPreCommand(cmd *cobra.Command, args []string) error {
 	// Set the called command and arguments
-	ctl.ccmd = cmd
-	ctl.args = args
+	ctl.cmdCmd = cmd
+	ctl.cmdArgs = args
 
 	// Set the config file override from command line
 	cnfPathFromCmdLine, _ := ctl.root.cmd.Flags().GetString("config")
