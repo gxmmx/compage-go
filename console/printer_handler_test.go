@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gxmmx/compage-go/color"
+	"github.com/gxmmx/compage-go/style"
 )
 
 func TestPrinterHandler_LevelRouting(t *testing.T) {
@@ -227,7 +227,7 @@ func TestPrinterHandler_WithGroup_Nested(t *testing.T) {
 func TestPrinterHandler_WithTextColorCarries(t *testing.T) {
 	var buf bytes.Buffer
 	p := newTestPrinterWithColor(&buf)
-	colored := p.WithTextColor(color.Cyan)
+	colored := p.WithTextColor(style.Cyan)
 	l := colored.Slog()
 
 	l.Info("tinted")

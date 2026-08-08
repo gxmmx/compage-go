@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gxmmx/compage-go/color"
+	"github.com/gxmmx/compage-go/style"
 )
 
 const (
@@ -197,7 +197,7 @@ func TestPrinter_WithIndent_Marker(t *testing.T) {
 func TestPrinter_WithTextColor_NoColorMode(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewPrinter(WithOutTo(&buf), WithColor(false))
-	colored := p.WithTextColor(color.Magenta)
+	colored := p.WithTextColor(style.Magenta)
 	colored.Info("plain")
 
 	// No ANSI codes when color is off
@@ -209,7 +209,7 @@ func TestPrinter_WithTextColor_NoColorMode(t *testing.T) {
 func TestPrinter_WithTextColor_ColorMode(t *testing.T) {
 	var buf bytes.Buffer
 	p := newTestPrinterWithColor(&buf)
-	colored := p.WithTextColor(color.Magenta)
+	colored := p.WithTextColor(style.Magenta)
 	colored.Info("tinted")
 
 	got := buf.String()
@@ -224,7 +224,7 @@ func TestPrinter_WithTextColor_ColorMode(t *testing.T) {
 func TestPrinter_WithTextColor_MarkerKeepsSemantic(t *testing.T) {
 	var buf bytes.Buffer
 	p := newTestPrinterWithColor(&buf)
-	colored := p.WithTextColor(color.Cyan)
+	colored := p.WithTextColor(style.Cyan)
 	colored.Success("deployed")
 
 	got := buf.String()
@@ -252,7 +252,7 @@ func TestPrinter_Verbose_DimAndTextColor(t *testing.T) {
 	var buf bytes.Buffer
 	p := newTestPrinterWithColor(&buf)
 	p = setPrinterLevel(p, slog.LevelDebug)
-	mag := p.WithTextColor(color.Magenta)
+	mag := p.WithTextColor(style.Magenta)
 	mag.Verbose("dim magenta")
 
 	got := buf.String()
