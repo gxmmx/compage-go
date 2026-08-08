@@ -1,0 +1,5 @@
+.DS_Store
+.env
+*.exe
+*.test
+*.out
