@@ -2,11 +2,10 @@ package console
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 )
@@ -224,10 +223,10 @@ func stderrWriter(cfg *loggerConfig) io.Writer {
 }
 
 func generateRunID() string {
-	b := make([]byte, 8)
-	_, err := rand.Read(b)
-	if err != nil {
-		return "0000000000000000"
+	const hex = "0123456789abcdef"
+	b := make([]byte, 16)
+	for i := range b {
+		b[i] = hex[rand.IntN(16)]
 	}
-	return hex.EncodeToString(b)
+	return string(b)
 }
