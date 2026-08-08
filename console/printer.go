@@ -5,6 +5,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+
+	"github.com/gxmmx/compage-go/color"
 )
 
 // Printer provides structured, level-gated CLI output with semantic markers,
@@ -23,7 +25,7 @@ type Printer interface {
 	Table(headers []string, rows [][]string)
 
 	WithIndent(n int) Printer
-	WithTextColor(c Color) Printer
+	WithTextColor(c color.Color) Printer
 
 	SetLevel(lvl slog.Level)
 	Slog() *slog.Logger
@@ -48,7 +50,7 @@ func NewPrinter(opts ...PrinterOption) Printer {
 		errW = outW
 	}
 
-	color := resolveColor(cfg.suppressColor, outW)
+	colorOn := color.Enabled(cfg.suppressColor, outW)
 
 	lvl := &slog.LevelVar{}
 	lvl.Set(cfg.level)
@@ -57,7 +59,7 @@ func NewPrinter(opts ...PrinterOption) Printer {
 		outW:      outW,
 		errW:      errW,
 		level:     lvl,
-		color:     color,
+		color:     colorOn,
 		indent:    0,
 		textColor: nil,
 	}
@@ -69,7 +71,7 @@ type printer struct {
 	level     *slog.LevelVar
 	color     bool
 	indent    int
-	textColor *Color
+	textColor *color.Color
 }
 
 func (p *printer) Info(msg string, args ...any) {
@@ -87,7 +89,7 @@ func (p *printer) Success(msg string, args ...any) {
 	text := fmt.Sprintf(msg, args...)
 	marker := "✓"
 	if p.color {
-		marker = colorize(marker, Green)
+		marker = color.Apply(marker, color.Green)
 	}
 	p.writeLine(p.outW, marker, text)
 }
@@ -99,7 +101,7 @@ func (p *printer) Warn(msg string, args ...any) {
 	text := fmt.Sprintf(msg, args...)
 	marker := "!"
 	if p.color {
-		marker = colorize(marker, Yellow)
+		marker = color.Apply(marker, color.Yellow)
 	}
 	p.writeLine(p.errW, marker, text)
 }
@@ -111,7 +113,7 @@ func (p *printer) Error(msg string, args ...any) {
 	text := fmt.Sprintf(msg, args...)
 	marker := "✗"
 	if p.color {
-		marker = colorize(marker, Red)
+		marker = color.Apply(marker, color.Red)
 	}
 	p.writeLine(p.errW, marker, text)
 }
@@ -121,12 +123,12 @@ func (p *printer) Verbose(msg string, args ...any) {
 		return
 	}
 	text := fmt.Sprintf(msg, args...)
-	colors := []Color{Dim}
+	colors := []color.Color{color.Dim}
 	if p.textColor != nil {
 		colors = append(colors, *p.textColor)
 	}
 	if p.color {
-		text = colorize(text, colors...)
+		text = color.Apply(text, colors...)
 	}
 	p.writeRaw(p.outW, p.indentPrefix()+text+"\n")
 }
@@ -177,7 +179,7 @@ func (p *printer) WithIndent(n int) Printer {
 	}
 }
 
-func (p *printer) WithTextColor(c Color) Printer {
+func (p *printer) WithTextColor(c color.Color) Printer {
 	return &printer{
 		outW:      p.outW,
 		errW:      p.errW,
@@ -201,7 +203,7 @@ func (p *printer) indentPrefix() string {
 
 func (p *printer) writeLine(w io.Writer, marker string, text string) {
 	if p.color && p.textColor != nil {
-		text = colorize(text, *p.textColor)
+		text = color.Apply(text, *p.textColor)
 	}
 
 	indent := p.indentPrefix()

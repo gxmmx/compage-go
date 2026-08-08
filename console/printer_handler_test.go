@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/gxmmx/compage-go/color"
 )
 
 func TestPrinterHandler_LevelRouting(t *testing.T) {
@@ -225,13 +227,13 @@ func TestPrinterHandler_WithGroup_Nested(t *testing.T) {
 func TestPrinterHandler_WithTextColorCarries(t *testing.T) {
 	var buf bytes.Buffer
 	p := newTestPrinterWithColor(&buf)
-	colored := p.WithTextColor(Cyan)
+	colored := p.WithTextColor(color.Cyan)
 	l := colored.Slog()
 
 	l.Info("tinted")
 
 	got := buf.String()
-	if !strings.Contains(got, ansiCyan) {
+	if !strings.Contains(got, "\033[36m") {
 		t.Errorf("expected cyan ANSI code from WithTextColor, got %q", got)
 	}
 }

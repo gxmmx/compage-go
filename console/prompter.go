@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/gxmmx/compage-go/color"
 )
 
 // Prompter extends Printer with interactive input capabilities.
@@ -44,11 +46,13 @@ func NewPrompter(opts ...PrompterOption) Prompter {
 		input = os.Stdin
 	}
 
+	outW := resolveOutWriter(&cfg.printerConfig)
+
 	return &prompter{
 		Printer: p,
 		input:   input,
-		outW:    resolveOutWriter(&cfg.printerConfig),
-		color:   p.(*printer).color,
+		outW:    outW,
+		color:   color.Enabled(cfg.suppressColor, outW),
 	}
 }
 
@@ -65,7 +69,7 @@ func (pr *prompter) Prompt(msg string, fallback string) string {
 	if fallback != "" {
 		hint := fallback
 		if pr.color {
-			hint = colorize(hint, Dim)
+			hint = color.Apply(hint, color.Dim)
 		}
 		_, _ = fmt.Fprintf(pr.outW, "%s [%s]: ", msg, hint)
 	} else {

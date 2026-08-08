@@ -5,6 +5,15 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/gxmmx/compage-go/color"
+)
+
+const (
+	testAnsiGreen   = "\033[32m"
+	testAnsiMagenta = "\033[35m"
+	testAnsiCyan    = "\033[36m"
+	testAnsiDim     = "\033[2m"
 )
 
 func TestPrinter_Info(t *testing.T) {
@@ -188,7 +197,7 @@ func TestPrinter_WithIndent_Marker(t *testing.T) {
 func TestPrinter_WithTextColor_NoColorMode(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewPrinter(WithOutTo(&buf), WithColor(false))
-	colored := p.WithTextColor(Magenta)
+	colored := p.WithTextColor(color.Magenta)
 	colored.Info("plain")
 
 	// No ANSI codes when color is off
@@ -200,11 +209,11 @@ func TestPrinter_WithTextColor_NoColorMode(t *testing.T) {
 func TestPrinter_WithTextColor_ColorMode(t *testing.T) {
 	var buf bytes.Buffer
 	p := newTestPrinterWithColor(&buf)
-	colored := p.WithTextColor(Magenta)
+	colored := p.WithTextColor(color.Magenta)
 	colored.Info("tinted")
 
 	got := buf.String()
-	if !strings.Contains(got, ansiMagenta) {
+	if !strings.Contains(got, testAnsiMagenta) {
 		t.Errorf("expected magenta ANSI code, got %q", got)
 	}
 	if !strings.Contains(got, "tinted") {
@@ -215,14 +224,14 @@ func TestPrinter_WithTextColor_ColorMode(t *testing.T) {
 func TestPrinter_WithTextColor_MarkerKeepsSemantic(t *testing.T) {
 	var buf bytes.Buffer
 	p := newTestPrinterWithColor(&buf)
-	colored := p.WithTextColor(Cyan)
+	colored := p.WithTextColor(color.Cyan)
 	colored.Success("deployed")
 
 	got := buf.String()
-	if !strings.Contains(got, ansiGreen) {
+	if !strings.Contains(got, testAnsiGreen) {
 		t.Errorf("expected green marker, got %q", got)
 	}
-	if !strings.Contains(got, ansiCyan) {
+	if !strings.Contains(got, testAnsiCyan) {
 		t.Errorf("expected cyan text, got %q", got)
 	}
 }
@@ -234,7 +243,7 @@ func TestPrinter_Verbose_Dimmed(t *testing.T) {
 	p.Verbose("dim text")
 
 	got := buf.String()
-	if !strings.Contains(got, ansiDim) {
+	if !strings.Contains(got, testAnsiDim) {
 		t.Errorf("expected dim ANSI code, got %q", got)
 	}
 }
@@ -243,14 +252,14 @@ func TestPrinter_Verbose_DimAndTextColor(t *testing.T) {
 	var buf bytes.Buffer
 	p := newTestPrinterWithColor(&buf)
 	p = setPrinterLevel(p, slog.LevelDebug)
-	mag := p.WithTextColor(Magenta)
+	mag := p.WithTextColor(color.Magenta)
 	mag.Verbose("dim magenta")
 
 	got := buf.String()
-	if !strings.Contains(got, ansiDim) {
+	if !strings.Contains(got, testAnsiDim) {
 		t.Errorf("expected dim, got %q", got)
 	}
-	if !strings.Contains(got, ansiMagenta) {
+	if !strings.Contains(got, testAnsiMagenta) {
 		t.Errorf("expected magenta, got %q", got)
 	}
 }
