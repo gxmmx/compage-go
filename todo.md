@@ -7,7 +7,7 @@ Tracked issues from initial code review. Address one at a time, each as its own 
 - [x] **1. Color handling** — Extracted to standalone `style/` package built around a `Styler` that captures the TTY/`NO_COLOR`/suppress decision at init. Terminal detection split to `term/`.
 - [x] **2. generateRunID uses crypto/rand** — Log correlation IDs don't need cryptographic randomness. Switch to `math/rand/v2`.
 - [x] **3. Prompter type assertion** — Resolved by the style redesign: `NewPrompter` now builds its own `style.New(...)` from config instead of reaching into `p.(*printer).color`.
-- [x] **4. Printer write serialization** — Added a `*sync.Mutex` shared by pointer across all printers derived via `WithIndent`/`WithTextColor`. Locked in `writeLine`/`writeRaw`/`Table`. Covered by a `-race` concurrency test.
+- [x] **4. Printer write serialization** — Added a `*sync.Mutex` shared by pointer across all printers derived via `WithIndent`/`WithTextColor`. Locked in `writeLine`/`writeRaw`/`Table`. The prompter now embeds the concrete `*printer` and routes prompt output through `writeRaw`, so interactive prompts share the same lock (and its duplicate `outW`/`styler` fields were removed). Covered by a `-race` concurrency test.
 - [x] **5. fanHandler error awareness** — Documented the intentional silent drop of child write errors (infallible logger; one failing sink must not abort the others).
 
 ## Config

@@ -39,38 +39,32 @@ func NewPrompter(opts ...PrompterOption) Prompter {
 		printerOpts = append(printerOpts, WithColor(false))
 	}
 
-	p := NewPrinter(printerOpts...)
+	p := newPrinter(printerOpts...)
 
 	input := cfg.input
 	if input == nil {
 		input = os.Stdin
 	}
 
-	outW := resolveOutWriter(&cfg.printerConfig)
-
 	return &prompter{
-		Printer: p,
+		printer: p,
 		input:   input,
-		outW:    outW,
-		styler:  style.New(cfg.suppressColor, outW),
 	}
 }
 
 type prompter struct {
-	Printer
-	input  io.Reader
-	outW   io.Writer
-	styler style.Styler
+	*printer
+	input io.Reader
 }
 
 // Prompt prints msg and reads a line of input. If the user provides empty input,
 // fallback is returned. The fallback value is shown in brackets if non-empty.
 func (pr *prompter) Prompt(msg string, fallback string) string {
 	if fallback != "" {
-		hint := pr.styler.Apply(fallback, style.NoColor, style.Dim)
-		_, _ = fmt.Fprintf(pr.outW, "%s [%s]: ", msg, hint)
+		hint := pr.outStyle.Apply(fallback, style.NoColor, style.Dim)
+		pr.writeRaw(pr.outW, fmt.Sprintf("%s [%s]: ", msg, hint))
 	} else {
-		_, _ = fmt.Fprintf(pr.outW, "%s: ", msg)
+		pr.writeRaw(pr.outW, fmt.Sprintf("%s: ", msg))
 	}
 
 	line := pr.readLine()
@@ -83,7 +77,7 @@ func (pr *prompter) Prompt(msg string, fallback string) string {
 // Continue prints msg with a [y/N] prompt and returns true if the user enters
 // "y" or "yes" (case-insensitive). Default is No (empty input returns false).
 func (pr *prompter) Continue(msg string) bool {
-	_, _ = fmt.Fprintf(pr.outW, "%s [y/N]: ", msg)
+	pr.writeRaw(pr.outW, fmt.Sprintf("%s [y/N]: ", msg))
 	line := strings.ToLower(pr.readLine())
 	return line == "y" || line == "yes"
 }
@@ -94,11 +88,4 @@ func (pr *prompter) readLine() string {
 		return strings.TrimSpace(scanner.Text())
 	}
 	return ""
-}
-
-func resolveOutWriter(cfg *printerConfig) io.Writer {
-	if cfg.outWriter != nil {
-		return cfg.outWriter
-	}
-	return os.Stdout
 }

@@ -34,6 +34,13 @@ type Printer interface {
 
 // NewPrinter creates a Printer with the given options.
 func NewPrinter(opts ...PrinterOption) Printer {
+	return newPrinter(opts...)
+}
+
+// newPrinter builds the concrete *printer. It exists so callers within the
+// package (e.g. NewPrompter) can share the printer's writer and mutex without
+// an interface type assertion.
+func newPrinter(opts ...PrinterOption) *printer {
 	cfg := &printerConfig{
 		level: slog.LevelInfo,
 	}
