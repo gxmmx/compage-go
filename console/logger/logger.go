@@ -190,10 +190,10 @@ func resolveWriters(cfg *config) ([]io.Writer, string) {
 	var writers []io.Writer
 	var fallbackMsg string
 
-	stderrTarget := stderrWriter(cfg)
+	base := baseWriter(cfg)
 
 	if cfg.stderr {
-		writers = append(writers, stderrTarget)
+		writers = append(writers, base)
 	}
 
 	if cfg.filePath != "" {
@@ -201,7 +201,7 @@ func resolveWriters(cfg *config) ([]io.Writer, string) {
 		if err != nil {
 			fallbackMsg = fmt.Sprintf("cannot open log file %q: %v", cfg.filePath, err)
 			if len(writers) == 0 {
-				writers = append(writers, stderrTarget)
+				writers = append(writers, base)
 			}
 		} else {
 			writers = append(writers, f)
@@ -209,15 +209,17 @@ func resolveWriters(cfg *config) ([]io.Writer, string) {
 	}
 
 	if len(writers) == 0 {
-		writers = append(writers, stderrTarget)
+		writers = append(writers, base)
 	}
 
 	return writers, fallbackMsg
 }
 
-func stderrWriter(cfg *config) io.Writer {
-	if cfg.fallbackWriter != nil {
-		return cfg.fallbackWriter
+// baseWriter resolves the default output sink: the configured writer if set
+// (testing), otherwise os.Stderr.
+func baseWriter(cfg *config) io.Writer {
+	if cfg.writer != nil {
+		return cfg.writer
 	}
 	return os.Stderr
 }

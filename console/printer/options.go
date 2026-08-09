@@ -14,8 +14,8 @@ type config struct {
 	// printer is a human interface that always writes to the standard streams.
 	outWriter io.Writer
 	errWriter io.Writer
-	// input, when non-nil, overrides the Prompter's stdin. Testing only.
-	input io.Reader
+	// inputReader, when non-nil, overrides the Prompter's stdin. Testing only.
+	inputReader io.Reader
 
 	outToErr      bool
 	errToOut      bool
@@ -71,9 +71,9 @@ func withWriters(out, err io.Writer) Option {
 	}
 }
 
-// withInput overrides the Prompter's input reader. Testing only.
-func withInput(r io.Reader) Option {
+// withReader overrides the Prompter's input reader. Testing only.
+func withReader(r io.Reader) Option {
 	return func(c *config) {
-		c.input = r
+		c.inputReader = r
 	}
 }

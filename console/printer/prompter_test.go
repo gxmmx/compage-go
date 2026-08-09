@@ -6,13 +6,13 @@ import (
 	"testing"
 )
 
-func TestPrompter_Prompt_withInput(t *testing.T) {
+func TestPrompter_Prompt_ReturnsInput(t *testing.T) {
 	var out bytes.Buffer
 	input := strings.NewReader("custom value\n")
 	pr := NewPrompter(
 		withWriters(&out, &out),
 		WithColor(false),
-		withInput(input),
+		withReader(input),
 	)
 
 	result := pr.Prompt("Enter name", "default")
@@ -34,7 +34,7 @@ func TestPrompter_Prompt_EmptyInput_ReturnsFallback(t *testing.T) {
 	pr := NewPrompter(
 		withWriters(&out, &out),
 		WithColor(false),
-		withInput(input),
+		withReader(input),
 	)
 
 	result := pr.Prompt("Enter name", "bob")
@@ -50,7 +50,7 @@ func TestPrompter_Prompt_NoFallback(t *testing.T) {
 	pr := NewPrompter(
 		withWriters(&out, &out),
 		WithColor(false),
-		withInput(input),
+		withReader(input),
 	)
 
 	result := pr.Prompt("Enter", "")
@@ -83,7 +83,7 @@ func TestPrompter_Continue_Yes(t *testing.T) {
 		pr := NewPrompter(
 			withWriters(&out, &out),
 			WithColor(false),
-			withInput(strings.NewReader(tt.input)),
+			withReader(strings.NewReader(tt.input)),
 		)
 
 		got := pr.Continue("proceed?")
@@ -98,7 +98,7 @@ func TestPrompter_Continue_ShowsPrompt(t *testing.T) {
 	pr := NewPrompter(
 		withWriters(&out, &out),
 		WithColor(false),
-		withInput(strings.NewReader("n\n")),
+		withReader(strings.NewReader("n\n")),
 	)
 
 	pr.Continue("delete everything?")
@@ -116,7 +116,7 @@ func TestPrompter_HasPrinterMethods(t *testing.T) {
 	pr := NewPrompter(
 		withWriters(&out, &out),
 		WithColor(false),
-		withInput(strings.NewReader("")),
+		withReader(strings.NewReader("")),
 	)
 
 	pr.Info("info message")

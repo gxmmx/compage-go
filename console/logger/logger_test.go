@@ -12,7 +12,7 @@ import (
 
 func TestNew_DefaultsToStderr(t *testing.T) {
 	var buf bytes.Buffer
-	log := New("test-app", withFallbackWriter(&buf))
+	log := New("test-app", withWriter(&buf))
 	if log == nil {
 		t.Fatal("expected non-nil logger")
 	}
@@ -207,7 +207,7 @@ func TestLogger_Slog(t *testing.T) {
 
 func TestLogger_WithFile_Fallback(t *testing.T) {
 	var buf bytes.Buffer
-	log := New("app", WithFile("/nonexistent/path/test.log"), withFallbackWriter(&buf))
+	log := New("app", WithFile("/nonexistent/path/test.log"), withWriter(&buf))
 	if log == nil {
 		t.Fatal("expected non-nil logger even with bad file path")
 	}

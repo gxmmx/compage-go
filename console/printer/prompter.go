@@ -31,7 +31,7 @@ func NewPrompter(opts ...Option) Prompter {
 	for _, opt := range opts {
 		opt(cfg)
 	}
-	input := cfg.input
+	input := cfg.inputReader
 	if input == nil {
 		input = os.Stdin
 	}

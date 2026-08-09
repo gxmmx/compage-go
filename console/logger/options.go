@@ -12,12 +12,12 @@ type Option func(*config)
 type FileOption func(*fileConfig)
 
 type config struct {
-	level          slog.Level
-	stderr         bool
-	filePath       string
-	fileOpts       []FileOption
-	runID          string
-	fallbackWriter io.Writer // override stderr fallback (testing only)
+	level    slog.Level
+	stderr   bool
+	filePath string
+	fileOpts []FileOption
+	runID    string
+	writer   io.Writer // output sink; defaults to os.Stderr, overridable for testing
 }
 
 type fileConfig struct {
@@ -56,10 +56,10 @@ func WithRunID(id string) Option {
 	}
 }
 
-// withFallbackWriter overrides the stderr fallback target. Used in tests to
+// withWriter overrides the default output sink (os.Stderr). Used in tests to
 // capture output without touching real stderr.
-func withFallbackWriter(w io.Writer) Option {
+func withWriter(w io.Writer) Option {
 	return func(c *config) {
-		c.fallbackWriter = w
+		c.writer = w
 	}
 }
