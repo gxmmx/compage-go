@@ -1,8 +1,11 @@
-// Package console provides structured logging and pre-init record queuing
-// for Go applications. It wraps log/slog with opinionated defaults: JSON output,
-// automatic run ID correlation, nested unit identity, and infallible construction.
+// Package console is the shared root for compage-go's console output packages.
+// It holds primitives common to its subpackages and nothing component-specific:
 //
-// See README.md for usage patterns and the bootstrap sequence.
+//   - console/logger — structured JSON logging for machine consumption.
+//   - console/printer — human-facing terminal output (and interactive prompts).
+//
+// This package itself only exposes level parsing and the slog-attribute hint
+// contract that both subpackages share. See the subpackage READMEs for usage.
 package console
 
 import (

@@ -1,4 +1,4 @@
-package console
+package printer
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ func TestPrinterHandler_LevelRouting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var out, errBuf bytes.Buffer
-			p := NewPrinter(WithOutTo(&out), WithErrTo(&errBuf), WithLevel(slog.LevelDebug), WithColor(false))
+			p := New(withWriters(&out, &errBuf), WithLevel(slog.LevelDebug), WithColor(false))
 			l := p.Slog()
 
 			l.Log(context.TODO(), tt.level, tt.msg)
@@ -46,7 +46,7 @@ func TestPrinterHandler_LevelRouting(t *testing.T) {
 
 func TestPrinterHandler_DebugSuppressedAtInfoLevel(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithLevel(slog.LevelInfo), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithLevel(slog.LevelInfo), WithColor(false))
 	l := p.Slog()
 
 	l.Debug("should not appear")
@@ -58,7 +58,7 @@ func TestPrinterHandler_DebugSuppressedAtInfoLevel(t *testing.T) {
 
 func TestPrinterHandler_WarnMarker(t *testing.T) {
 	var out, errBuf bytes.Buffer
-	p := NewPrinter(WithOutTo(&out), WithErrTo(&errBuf), WithColor(false))
+	p := New(withWriters(&out, &errBuf), WithColor(false))
 	l := p.Slog()
 
 	l.Warn("careful")
@@ -70,7 +70,7 @@ func TestPrinterHandler_WarnMarker(t *testing.T) {
 
 func TestPrinterHandler_ErrorMarker(t *testing.T) {
 	var out, errBuf bytes.Buffer
-	p := NewPrinter(WithOutTo(&out), WithErrTo(&errBuf), WithColor(false))
+	p := New(withWriters(&out, &errBuf), WithColor(false))
 	l := p.Slog()
 
 	l.Error("failed")
@@ -82,7 +82,7 @@ func TestPrinterHandler_ErrorMarker(t *testing.T) {
 
 func TestPrinterHandler_AttrsRendered(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	l := p.Slog()
 
 	l.Info("loaded", "path", "/etc/app.toml", "format", "toml")
@@ -98,7 +98,7 @@ func TestPrinterHandler_AttrsRendered(t *testing.T) {
 
 func TestPrinterHandler_HintSuccess(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	l := p.Slog()
 
 	l.Info("enrolled", "console.success", true)
@@ -114,7 +114,7 @@ func TestPrinterHandler_HintSuccess(t *testing.T) {
 
 func TestPrinterHandler_HintIndent(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	l := p.Slog()
 
 	l.Info("indented", "console.indent", 1)
@@ -130,7 +130,7 @@ func TestPrinterHandler_HintIndent(t *testing.T) {
 
 func TestPrinterHandler_HintIndentComposesWithBase(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	sub := p.WithIndent(2)
 	l := sub.Slog()
 
@@ -145,7 +145,7 @@ func TestPrinterHandler_HintIndentComposesWithBase(t *testing.T) {
 
 func TestPrinterHandler_WithAttrs_Persist(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	l := p.Slog().With("component", "config")
 
 	l.Info("first")
@@ -165,7 +165,7 @@ func TestPrinterHandler_WithAttrs_Persist(t *testing.T) {
 
 func TestPrinterHandler_WithAttrs_HintPersists(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	l := p.Slog().With("console.indent", 1)
 
 	l.Info("one")
@@ -186,7 +186,7 @@ func TestPrinterHandler_WithAttrs_HintPersists(t *testing.T) {
 
 func TestPrinterHandler_WithAttrs_HintIndentAccumulates(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	l := p.Slog().With("console.indent", 1).With("console.indent", 1)
 
 	l.Info("double")
@@ -200,7 +200,7 @@ func TestPrinterHandler_WithAttrs_HintIndentAccumulates(t *testing.T) {
 
 func TestPrinterHandler_WithGroup(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	l := p.Slog().WithGroup("db")
 
 	l.Info("query", "rows", 42)
@@ -213,7 +213,7 @@ func TestPrinterHandler_WithGroup(t *testing.T) {
 
 func TestPrinterHandler_WithGroup_Nested(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	l := p.Slog().WithGroup("app").WithGroup("db")
 
 	l.Info("query", "rows", 42)
@@ -240,7 +240,7 @@ func TestPrinterHandler_WithTextColorCarries(t *testing.T) {
 
 func TestPrinterHandler_HintNotInOutput(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	l := p.Slog()
 
 	l.Info("msg", "console.indent", 1, "console.success", true, "real", "data")

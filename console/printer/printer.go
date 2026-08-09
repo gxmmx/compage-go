@@ -1,4 +1,4 @@
-package console
+package printer
 
 import (
 	"fmt"
@@ -32,31 +32,23 @@ type Printer interface {
 	Slog() *slog.Logger
 }
 
-// NewPrinter creates a Printer with the given options.
-func NewPrinter(opts ...PrinterOption) Printer {
+// New creates a Printer with the given options.
+func New(opts ...Option) Printer {
 	return newPrinter(opts...)
 }
 
 // newPrinter builds the concrete *printer. It exists so callers within the
 // package (e.g. NewPrompter) can share the printer's writer and mutex without
 // an interface type assertion.
-func newPrinter(opts ...PrinterOption) *printer {
-	cfg := &printerConfig{
+func newPrinter(opts ...Option) *printer {
+	cfg := &config{
 		level: slog.LevelInfo,
 	}
 	for _, opt := range opts {
 		opt(cfg)
 	}
 
-	outW := cfg.outWriter
-	if outW == nil {
-		outW = os.Stdout
-	}
-
-	errW := cfg.errWriter
-	if errW == nil {
-		errW = outW
-	}
+	outW, errW := resolveStreams(cfg)
 
 	lvl := &slog.LevelVar{}
 	lvl.Set(cfg.level)
@@ -69,6 +61,29 @@ func newPrinter(opts ...PrinterOption) *printer {
 		outStyle: style.New(cfg.suppressColor, outW),
 		errStyle: style.New(cfg.suppressColor, errW),
 	}
+}
+
+// resolveStreams determines the out/err targets. A printer is a human
+// interface, so it writes to the standard streams: normal output to stdout and
+// warn/error output to stderr. WithOutToErr/WithErrToOut redirect between the
+// two; explicit writers (test-only) take precedence over everything.
+func resolveStreams(cfg *config) (out, err io.Writer) {
+	out = os.Stdout
+	if cfg.outToErr {
+		out = os.Stderr
+	}
+	if cfg.outWriter != nil {
+		out = cfg.outWriter
+	}
+
+	err = os.Stderr
+	if cfg.errToOut {
+		err = os.Stdout
+	}
+	if cfg.errWriter != nil {
+		err = cfg.errWriter
+	}
+	return out, err
 }
 
 type printer struct {

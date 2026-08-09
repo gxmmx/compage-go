@@ -1,8 +1,10 @@
-package console
+package printer
 
 import (
 	"bytes"
+	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +21,7 @@ const (
 
 func TestPrinter_Info(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	p.Info("hello %s", "world")
 
 	got := buf.String()
@@ -30,7 +32,7 @@ func TestPrinter_Info(t *testing.T) {
 
 func TestPrinter_Success(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	p.Success("done %d", 1)
 
 	got := buf.String()
@@ -44,7 +46,7 @@ func TestPrinter_Success(t *testing.T) {
 
 func TestPrinter_Warn_RoutesToErr(t *testing.T) {
 	var out, errBuf bytes.Buffer
-	p := NewPrinter(WithOutTo(&out), WithErrTo(&errBuf), WithColor(false))
+	p := New(withWriters(&out, &errBuf), WithColor(false))
 	p.Warn("careful %s", "now")
 
 	if out.Len() != 0 {
@@ -60,7 +62,7 @@ func TestPrinter_Warn_RoutesToErr(t *testing.T) {
 
 func TestPrinter_Error_RoutesToErr(t *testing.T) {
 	var out, errBuf bytes.Buffer
-	p := NewPrinter(WithOutTo(&out), WithErrTo(&errBuf), WithColor(false))
+	p := New(withWriters(&out, &errBuf), WithColor(false))
 	p.Error("bad %s", "thing")
 
 	if out.Len() != 0 {
@@ -76,7 +78,7 @@ func TestPrinter_Error_RoutesToErr(t *testing.T) {
 
 func TestPrinter_Verbose_ShowsAtDebugLevel(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithLevel(slog.LevelDebug), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithLevel(slog.LevelDebug), WithColor(false))
 	p.Verbose("detail %d", 42)
 
 	if !strings.Contains(buf.String(), "detail 42") {
@@ -86,7 +88,7 @@ func TestPrinter_Verbose_ShowsAtDebugLevel(t *testing.T) {
 
 func TestPrinter_Verbose_HiddenAtInfoLevel(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithLevel(slog.LevelInfo), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithLevel(slog.LevelInfo), WithColor(false))
 	p.Verbose("should not appear")
 
 	if buf.Len() != 0 {
@@ -96,7 +98,7 @@ func TestPrinter_Verbose_HiddenAtInfoLevel(t *testing.T) {
 
 func TestPrinter_LevelFiltering_WarnOnly(t *testing.T) {
 	var out, errBuf bytes.Buffer
-	p := NewPrinter(WithOutTo(&out), WithErrTo(&errBuf), WithLevel(slog.LevelWarn), WithColor(false))
+	p := New(withWriters(&out, &errBuf), WithLevel(slog.LevelWarn), WithColor(false))
 
 	p.Info("hidden")
 	p.Success("hidden")
@@ -115,7 +117,7 @@ func TestPrinter_LevelFiltering_WarnOnly(t *testing.T) {
 
 func TestPrinter_LevelFiltering_ErrorOnly(t *testing.T) {
 	var out, errBuf bytes.Buffer
-	p := NewPrinter(WithOutTo(&out), WithErrTo(&errBuf), WithLevel(slog.LevelError), WithColor(false))
+	p := New(withWriters(&out, &errBuf), WithLevel(slog.LevelError), WithColor(false))
 
 	p.Info("hidden")
 	p.Warn("hidden")
@@ -133,7 +135,7 @@ func TestPrinter_LevelFiltering_ErrorOnly(t *testing.T) {
 
 func TestPrinter_Print(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	p.Print("raw %s", "output")
 
 	if buf.String() != "raw output\n" {
@@ -143,7 +145,7 @@ func TestPrinter_Print(t *testing.T) {
 
 func TestPrinter_Printf(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	p.Printf("no newline %d", 1)
 
 	if buf.String() != "no newline 1" {
@@ -153,7 +155,7 @@ func TestPrinter_Printf(t *testing.T) {
 
 func TestPrinter_Println(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	p.Println("a", "b")
 
 	if buf.String() != "a b\n" {
@@ -163,7 +165,7 @@ func TestPrinter_Println(t *testing.T) {
 
 func TestPrinter_WithIndent(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	sub := p.WithIndent(1)
 	sub.Info("indented")
 
@@ -174,7 +176,7 @@ func TestPrinter_WithIndent(t *testing.T) {
 
 func TestPrinter_WithIndent_Deep(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	deep := p.WithIndent(1).WithIndent(1)
 	deep.Info("deep")
 
@@ -185,7 +187,7 @@ func TestPrinter_WithIndent_Deep(t *testing.T) {
 
 func TestPrinter_WithIndent_Marker(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	sub := p.WithIndent(1)
 	sub.Success("step done")
 
@@ -197,7 +199,7 @@ func TestPrinter_WithIndent_Marker(t *testing.T) {
 
 func TestPrinter_WithTextColor_NoColorMode(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	colored := p.WithTextColor(style.Magenta)
 	colored.Info("plain")
 
@@ -265,20 +267,43 @@ func TestPrinter_Verbose_DimAndTextColor(t *testing.T) {
 	}
 }
 
-func TestPrinter_ErrFallsBackToOut(t *testing.T) {
-	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
-	// No WithErrTo set — should fall back to out writer
-	p.Warn("goes to out")
+func TestResolveStreams(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     config
+		wantOut io.Writer
+		wantErr io.Writer
+	}{
+		{"default", config{}, os.Stdout, os.Stderr},
+		{"outToErr", config{outToErr: true}, os.Stderr, os.Stderr},
+		{"errToOut", config{errToOut: true}, os.Stdout, os.Stdout},
+		{"both swapped", config{outToErr: true, errToOut: true}, os.Stderr, os.Stdout},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := resolveStreams(&tt.cfg)
+			if out != tt.wantOut {
+				t.Errorf("out = %v, want %v", out, tt.wantOut)
+			}
+			if err != tt.wantErr {
+				t.Errorf("err = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
 
-	if !strings.Contains(buf.String(), "goes to out") {
-		t.Errorf("expected warn in out buffer, got %q", buf.String())
+func TestResolveStreams_WriterOverride(t *testing.T) {
+	var out, errBuf bytes.Buffer
+	// Explicit writers (test-only) win over the toggles.
+	got, gotErr := resolveStreams(&config{outWriter: &out, errWriter: &errBuf, outToErr: true})
+	if got != &out || gotErr != &errBuf {
+		t.Errorf("explicit writers should take precedence")
 	}
 }
 
 func TestPrinter_Table(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	p.Table(
 		[]string{"NAME", "AGE"},
 		[][]string{
@@ -304,7 +329,7 @@ func TestPrinter_Table(t *testing.T) {
 
 func TestPrinter_Table_Empty(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	p.Table([]string{"A", "B"}, nil)
 
 	if buf.Len() != 0 {
@@ -314,7 +339,7 @@ func TestPrinter_Table_Empty(t *testing.T) {
 
 func TestPrinter_SetLevel(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false), WithLevel(slog.LevelWarn))
+	p := New(withWriters(&buf, &buf), WithColor(false), WithLevel(slog.LevelWarn))
 	child := p.WithIndent(2)
 
 	p.Info("before")
@@ -360,7 +385,7 @@ func setPrinterLevel(p Printer, lvl slog.Level) Printer {
 // the underlying writer.
 func TestPrinter_ConcurrentWrites(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	p := New(withWriters(&buf, &buf), WithColor(false))
 	indented := p.WithIndent(1)
 
 	const goroutines = 50

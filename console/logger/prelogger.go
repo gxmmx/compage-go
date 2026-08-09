@@ -1,4 +1,4 @@
-package console
+package logger
 
 import (
 	"context"
@@ -35,7 +35,7 @@ func (p *preLogger) Error(msg string, args ...any) { p.record(slog.LevelError, m
 
 func (p *preLogger) record(level slog.Level, msg string, args []any) {
 	if p.flushed {
-		panic("console.PreLogger: used after Flush")
+		panic("logger.PreLogger: used after Flush")
 	}
 
 	var pcs [1]uintptr
@@ -62,7 +62,7 @@ func (p *preLogger) Count(level slog.Level) int {
 // subsequent method call will panic.
 func (p *preLogger) Flush(target *slog.Logger) {
 	if p.flushed {
-		panic("console.PreLogger: Flush called twice")
+		panic("logger.PreLogger: Flush called twice")
 	}
 	p.flushed = true
 

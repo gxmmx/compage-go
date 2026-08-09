@@ -1,4 +1,4 @@
-package console
+package logger
 
 import (
 	"context"
@@ -48,7 +48,7 @@ func New(program string, opts ...Option) Logger {
 		program = filepath.Base(os.Args[0])
 	}
 
-	cfg := &loggerConfig{
+	cfg := &config{
 		level: slog.LevelInfo,
 	}
 	for _, opt := range opts {
@@ -186,7 +186,7 @@ func (l *logger) Slog() *slog.Logger {
 	return l.slogger
 }
 
-func resolveWriters(cfg *loggerConfig) ([]io.Writer, string) {
+func resolveWriters(cfg *config) ([]io.Writer, string) {
 	var writers []io.Writer
 	var fallbackMsg string
 
@@ -215,7 +215,7 @@ func resolveWriters(cfg *loggerConfig) ([]io.Writer, string) {
 	return writers, fallbackMsg
 }
 
-func stderrWriter(cfg *loggerConfig) io.Writer {
+func stderrWriter(cfg *config) io.Writer {
 	if cfg.fallbackWriter != nil {
 		return cfg.fallbackWriter
 	}

@@ -1,4 +1,4 @@
-package console
+package printer
 
 import (
 	"bufio"
@@ -17,30 +17,20 @@ type Prompter interface {
 	Continue(msg string) bool
 }
 
-// NewPrompter creates a Prompter with the given options.
-func NewPrompter(opts ...PrompterOption) Prompter {
-	cfg := &prompterConfig{}
-	cfg.level = 0
+// NewPrompter creates a Prompter with the given options. It accepts the same
+// options as New; a Prompter is a Printer that can also read interactive input.
+//
+// Input always comes from os.Stdin. Prompting is only appropriate when the
+// process is attached to a terminal — callers should verify that (e.g. a TTY
+// check) before using a Prompter, and otherwise fall back to a non-interactive
+// path rather than prompting into a pipe.
+func NewPrompter(opts ...Option) Prompter {
+	p := newPrinter(opts...)
+
+	cfg := &config{}
 	for _, opt := range opts {
 		opt(cfg)
 	}
-
-	printerOpts := []PrinterOption{}
-	if cfg.outWriter != nil {
-		printerOpts = append(printerOpts, WithOutTo(cfg.outWriter))
-	}
-	if cfg.errWriter != nil {
-		printerOpts = append(printerOpts, WithErrTo(cfg.errWriter))
-	}
-	if cfg.level != 0 {
-		printerOpts = append(printerOpts, WithLevel(cfg.level))
-	}
-	if cfg.suppressColor {
-		printerOpts = append(printerOpts, WithColor(false))
-	}
-
-	p := newPrinter(printerOpts...)
-
 	input := cfg.input
 	if input == nil {
 		input = os.Stdin

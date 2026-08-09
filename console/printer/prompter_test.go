@@ -1,4 +1,4 @@
-package console
+package printer
 
 import (
 	"bytes"
@@ -6,13 +6,13 @@ import (
 	"testing"
 )
 
-func TestPrompter_Prompt_WithInput(t *testing.T) {
+func TestPrompter_Prompt_withInput(t *testing.T) {
 	var out bytes.Buffer
 	input := strings.NewReader("custom value\n")
 	pr := NewPrompter(
-		PrinterOptFor(WithOutTo(&out)),
-		PrinterOptFor(WithColor(false)),
-		WithInput(input),
+		withWriters(&out, &out),
+		WithColor(false),
+		withInput(input),
 	)
 
 	result := pr.Prompt("Enter name", "default")
@@ -32,9 +32,9 @@ func TestPrompter_Prompt_EmptyInput_ReturnsFallback(t *testing.T) {
 	var out bytes.Buffer
 	input := strings.NewReader("\n")
 	pr := NewPrompter(
-		PrinterOptFor(WithOutTo(&out)),
-		PrinterOptFor(WithColor(false)),
-		WithInput(input),
+		withWriters(&out, &out),
+		WithColor(false),
+		withInput(input),
 	)
 
 	result := pr.Prompt("Enter name", "bob")
@@ -48,9 +48,9 @@ func TestPrompter_Prompt_NoFallback(t *testing.T) {
 	var out bytes.Buffer
 	input := strings.NewReader("value\n")
 	pr := NewPrompter(
-		PrinterOptFor(WithOutTo(&out)),
-		PrinterOptFor(WithColor(false)),
-		WithInput(input),
+		withWriters(&out, &out),
+		WithColor(false),
+		withInput(input),
 	)
 
 	result := pr.Prompt("Enter", "")
@@ -81,9 +81,9 @@ func TestPrompter_Continue_Yes(t *testing.T) {
 	for _, tt := range tests {
 		var out bytes.Buffer
 		pr := NewPrompter(
-			PrinterOptFor(WithOutTo(&out)),
-			PrinterOptFor(WithColor(false)),
-			WithInput(strings.NewReader(tt.input)),
+			withWriters(&out, &out),
+			WithColor(false),
+			withInput(strings.NewReader(tt.input)),
 		)
 
 		got := pr.Continue("proceed?")
@@ -96,9 +96,9 @@ func TestPrompter_Continue_Yes(t *testing.T) {
 func TestPrompter_Continue_ShowsPrompt(t *testing.T) {
 	var out bytes.Buffer
 	pr := NewPrompter(
-		PrinterOptFor(WithOutTo(&out)),
-		PrinterOptFor(WithColor(false)),
-		WithInput(strings.NewReader("n\n")),
+		withWriters(&out, &out),
+		WithColor(false),
+		withInput(strings.NewReader("n\n")),
 	)
 
 	pr.Continue("delete everything?")
@@ -114,9 +114,9 @@ func TestPrompter_Continue_ShowsPrompt(t *testing.T) {
 func TestPrompter_HasPrinterMethods(t *testing.T) {
 	var out bytes.Buffer
 	pr := NewPrompter(
-		PrinterOptFor(WithOutTo(&out)),
-		PrinterOptFor(WithColor(false)),
-		WithInput(strings.NewReader("")),
+		withWriters(&out, &out),
+		WithColor(false),
+		withInput(strings.NewReader("")),
 	)
 
 	pr.Info("info message")

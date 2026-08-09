@@ -1,17 +1,18 @@
-package console
+package printer
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
 	"strings"
+
+	"github.com/gxmmx/compage-go/console"
 )
 
-const hintPrefix = "console."
-
 const (
-	hintIndent  = "console.indent"
-	hintSuccess = "console.success"
+	hintPrefix  = console.HintPrefix
+	hintIndent  = console.HintIndent
+	hintSuccess = console.HintSuccess
 )
 
 // printerHandler implements slog.Handler by routing records through a printer's

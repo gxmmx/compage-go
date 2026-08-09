@@ -1,9 +1,11 @@
-package console
+package logger
 
 import (
 	"context"
 	"log/slog"
 	"strings"
+
+	"github.com/gxmmx/compage-go/console"
 )
 
 // contextHandler wraps a slog.Handler and extracts known context keys
@@ -37,7 +39,7 @@ func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
 	var filtered slog.Record
 	hasHints := false
 	r.Attrs(func(a slog.Attr) bool {
-		if strings.HasPrefix(a.Key, hintPrefix) {
+		if strings.HasPrefix(a.Key, console.HintPrefix) {
 			hasHints = true
 			return false
 		}
@@ -46,7 +48,7 @@ func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
 	if hasHints {
 		filtered = slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
 		r.Attrs(func(a slog.Attr) bool {
-			if !strings.HasPrefix(a.Key, hintPrefix) {
+			if !strings.HasPrefix(a.Key, console.HintPrefix) {
 				filtered.AddAttrs(a)
 			}
 			return true
@@ -69,7 +71,7 @@ func (h *contextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 func filterHintAttrs(attrs []slog.Attr) []slog.Attr {
 	n := 0
 	for _, a := range attrs {
-		if !strings.HasPrefix(a.Key, hintPrefix) {
+		if !strings.HasPrefix(a.Key, console.HintPrefix) {
 			n++
 		}
 	}
@@ -78,7 +80,7 @@ func filterHintAttrs(attrs []slog.Attr) []slog.Attr {
 	}
 	filtered := make([]slog.Attr, 0, n)
 	for _, a := range attrs {
-		if !strings.HasPrefix(a.Key, hintPrefix) {
+		if !strings.HasPrefix(a.Key, console.HintPrefix) {
 			filtered = append(filtered, a)
 		}
 	}
