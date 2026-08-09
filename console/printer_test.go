@@ -338,10 +338,11 @@ func newTestPrinterWithColor(buf *bytes.Buffer) Printer {
 	lvl := &slog.LevelVar{}
 	lvl.Set(slog.LevelInfo)
 	return &printer{
-		outW:  buf,
-		errW:  buf,
-		level: lvl,
-		color: true,
+		outW:     buf,
+		errW:     buf,
+		level:    lvl,
+		outStyle: style.New(false, nil),
+		errStyle: style.New(false, nil),
 	}
 }
 

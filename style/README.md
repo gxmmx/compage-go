@@ -1,36 +1,53 @@
 # style
 
-Terminal text styling with separate color and modifier types. Stateless and
-composable — colors and modifiers combine freely without conflating concepts.
+Terminal text styling with init-time gating. Create a `Styler` once per output
+destination — it checks TTY, `NO_COLOR`, and a suppress flag at creation. All
+subsequent calls apply codes or return text unchanged without per-call checks.
 
-## Quick start
+## Usage
 
 ```go
 import "github.com/gxmmx/compage-go/style"
 
+// Create a Styler for your output stream
+s := style.New(noColorFlag, os.Stdout)
+
 // One-off styling
-fmt.Println(style.Apply("success", style.Green))
-fmt.Println(style.Apply("warning", style.Yellow, style.Bold))
-fmt.Println(style.Apply("subtle", style.NoColor, style.Dim))
+fmt.Println(s.Apply("deployed", style.Green))
+fmt.Println(s.Apply("deprecated", style.Yellow, style.Bold))
+fmt.Println(s.Apply("subtle", style.NoColor, style.Dim))
 
-// Reusable styles
-var (
-    heading = style.Build(style.Cyan, style.Bold, style.Underline)
-    muted   = style.Build(style.NoColor, style.Dim)
-)
+// Reusable styles — define once, apply many times
+success := s.Build(style.Green)
+warn := s.Build(style.Yellow, style.Bold)
+heading := s.Build(style.BrightCyan, style.Bold, style.Underline)
 
-fmt.Println(heading.Apply("Configuration"))
-fmt.Println(muted.Apply("no changes detected"))
+fmt.Println(success.Apply("All checks passed"))
+fmt.Println(warn.Apply("Endpoint deprecated"))
+fmt.Println(heading.Apply("Results"))
 ```
 
-## Types
-
-### Color
-
-Foreground text colors. `NoColor` is the zero value — produces no color output.
+## Styler construction
 
 ```go
-style.NoColor  // no foreground color (safe zero value)
+// Normal: checks TTY + NO_COLOR + suppress
+s := style.New(false, os.Stdout)
+
+// Suppressed (e.g. --no-color flag)
+s := style.New(true, os.Stdout)
+
+// Forced active (testing, or codes are unconditionally needed)
+s := style.New(false, nil)
+```
+
+Priority: `NO_COLOR` env (always wins) > suppress flag > TTY detection on writer.
+
+Zero value `Styler{}` is inactive — safe default if forgotten.
+
+## Colors
+
+```go
+style.NoColor        // no color (zero value, safe no-op)
 style.Red
 style.Green
 style.Yellow
@@ -38,70 +55,38 @@ style.Blue
 style.Magenta
 style.Cyan
 style.White
+style.BrightRed
+style.BrightGreen
+style.BrightYellow
+style.BrightBlue
+style.BrightMagenta
+style.BrightCyan
+style.BrightWhite
 ```
 
-### Mod
-
-Text style modifiers. Combine freely with each other and with a color.
+## Modifiers
 
 ```go
-style.Bold       // increased intensity
-style.Dim        // decreased intensity (faint)
-style.Italic     // italic text
-style.Underline  // underlined text
+style.Bold           // increased intensity
+style.Dim            // decreased intensity
+style.Italic         // italic text
+style.Underline      // underlined text
 ```
 
-## API
-
-### Apply
-
-One-off convenience. First argument after text is always a `Color`, followed by
-zero or more `Mod` values.
+Modifiers combine freely with each other and with a color:
 
 ```go
-style.Apply("text", style.Red)                    // red
-style.Apply("text", style.Green, style.Bold)      // bold green
-style.Apply("text", style.NoColor, style.Dim)     // dim, no color
-style.Apply("text", style.Blue, style.Dim, style.Italic)  // dim italic blue
+s.Apply("text", style.Red, style.Bold, style.Underline)
+s.Apply("text", style.NoColor, style.Dim, style.Italic)
 ```
 
-Returns text unchanged when `NoColor` is passed with no modifiers.
+## Raw
 
-### Build
-
-Creates a reusable `Style`. Use when the same combination is applied repeatedly.
+For edge cases where you need ANSI codes without a Styler (e.g. passing styled
+strings to external tooling):
 
 ```go
-s := style.Build(style.Red, style.Bold)
-s.Apply("error one")
-s.Apply("error two")
+styled := style.Raw("error", style.Red, style.Bold)
 ```
 
-### Enabled
-
-Determines whether styled output should be active for a given writer. The caller
-uses this to gate `Apply` calls — `Apply` itself is pure and always emits codes.
-
-```go
-active := style.Enabled(suppressFlag, os.Stdout)
-
-if active {
-    fmt.Println(style.Apply("colored", style.Green))
-} else {
-    fmt.Println("colored")
-}
-```
-
-Priority: `NO_COLOR` env var (always wins) > explicit suppress > TTY auto-detect.
-
-## Design
-
-- **Stateless.** `Apply` and `Build` are pure functions. No global state, no
-  init, no singletons.
-- **Caller gates output.** `Apply` always produces ANSI codes. The caller checks
-  `Enabled` once and decides whether to style. This keeps styling logic testable
-  without environment manipulation.
-- **Colors and modifiers are distinct types.** Prevents passing a modifier where
-  a color is expected and vice versa. The compiler catches misuse.
-- **Zero value is safe.** `NoColor` and uninitialized `Color` variables produce
-  no output rather than defaulting to a visible color.
+`Raw` always wraps — no gating. Not the recommended path for normal usage.

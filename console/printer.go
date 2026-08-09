@@ -50,18 +50,15 @@ func NewPrinter(opts ...PrinterOption) Printer {
 		errW = outW
 	}
 
-	colorOn := style.Enabled(cfg.suppressColor, outW)
-
 	lvl := &slog.LevelVar{}
 	lvl.Set(cfg.level)
 
 	return &printer{
-		outW:      outW,
-		errW:      errW,
-		level:     lvl,
-		color:     colorOn,
-		indent:    0,
-		textColor: nil,
+		outW:     outW,
+		errW:     errW,
+		level:    lvl,
+		outStyle: style.New(cfg.suppressColor, outW),
+		errStyle: style.New(cfg.suppressColor, errW),
 	}
 }
 
@@ -69,9 +66,10 @@ type printer struct {
 	outW      io.Writer
 	errW      io.Writer
 	level     *slog.LevelVar
-	color     bool
+	outStyle  style.Styler
+	errStyle  style.Styler
 	indent    int
-	textColor *style.Color
+	textColor style.Color
 }
 
 func (p *printer) Info(msg string, args ...any) {
@@ -79,7 +77,7 @@ func (p *printer) Info(msg string, args ...any) {
 		return
 	}
 	text := fmt.Sprintf(msg, args...)
-	p.writeLine(p.outW, "", text)
+	p.writeLine(p.outW, p.outStyle, "", text)
 }
 
 func (p *printer) Success(msg string, args ...any) {
@@ -87,11 +85,8 @@ func (p *printer) Success(msg string, args ...any) {
 		return
 	}
 	text := fmt.Sprintf(msg, args...)
-	marker := "✓"
-	if p.color {
-		marker = style.Apply(marker, style.Green)
-	}
-	p.writeLine(p.outW, marker, text)
+	marker := p.outStyle.Apply("✓", style.Green)
+	p.writeLine(p.outW, p.outStyle, marker, text)
 }
 
 func (p *printer) Warn(msg string, args ...any) {
@@ -99,11 +94,8 @@ func (p *printer) Warn(msg string, args ...any) {
 		return
 	}
 	text := fmt.Sprintf(msg, args...)
-	marker := "!"
-	if p.color {
-		marker = style.Apply(marker, style.Yellow)
-	}
-	p.writeLine(p.errW, marker, text)
+	marker := p.errStyle.Apply("!", style.Yellow)
+	p.writeLine(p.errW, p.errStyle, marker, text)
 }
 
 func (p *printer) Error(msg string, args ...any) {
@@ -111,11 +103,8 @@ func (p *printer) Error(msg string, args ...any) {
 		return
 	}
 	text := fmt.Sprintf(msg, args...)
-	marker := "✗"
-	if p.color {
-		marker = style.Apply(marker, style.Red)
-	}
-	p.writeLine(p.errW, marker, text)
+	marker := p.errStyle.Apply("✗", style.Red)
+	p.writeLine(p.errW, p.errStyle, marker, text)
 }
 
 func (p *printer) Verbose(msg string, args ...any) {
@@ -123,13 +112,7 @@ func (p *printer) Verbose(msg string, args ...any) {
 		return
 	}
 	text := fmt.Sprintf(msg, args...)
-	if p.color {
-		if p.textColor != nil {
-			text = style.Apply(text, *p.textColor, style.Dim)
-		} else {
-			text = style.Apply(text, style.NoColor, style.Dim)
-		}
-	}
+	text = p.outStyle.Apply(text, p.textColor, style.Dim)
 	p.writeRaw(p.outW, p.indentPrefix()+text+"\n")
 }
 
@@ -173,7 +156,8 @@ func (p *printer) WithIndent(n int) Printer {
 		outW:      p.outW,
 		errW:      p.errW,
 		level:     p.level,
-		color:     p.color,
+		outStyle:  p.outStyle,
+		errStyle:  p.errStyle,
 		indent:    p.indent + n,
 		textColor: p.textColor,
 	}
@@ -184,9 +168,10 @@ func (p *printer) WithTextColor(c style.Color) Printer {
 		outW:      p.outW,
 		errW:      p.errW,
 		level:     p.level,
-		color:     p.color,
+		outStyle:  p.outStyle,
+		errStyle:  p.errStyle,
 		indent:    p.indent,
-		textColor: &c,
+		textColor: c,
 	}
 }
 
@@ -201,10 +186,8 @@ func (p *printer) indentPrefix() string {
 	return prefix
 }
 
-func (p *printer) writeLine(w io.Writer, marker string, text string) {
-	if p.color && p.textColor != nil {
-		text = style.Apply(text, *p.textColor)
-	}
+func (p *printer) writeLine(w io.Writer, s style.Styler, marker string, text string) {
+	text = s.Apply(text, p.textColor)
 
 	indent := p.indentPrefix()
 	if marker == "" {

@@ -52,25 +52,22 @@ func NewPrompter(opts ...PrompterOption) Prompter {
 		Printer: p,
 		input:   input,
 		outW:    outW,
-		color:   style.Enabled(cfg.suppressColor, outW),
+		styler:  style.New(cfg.suppressColor, outW),
 	}
 }
 
 type prompter struct {
 	Printer
-	input io.Reader
-	outW  io.Writer
-	color bool
+	input  io.Reader
+	outW   io.Writer
+	styler style.Styler
 }
 
 // Prompt prints msg and reads a line of input. If the user provides empty input,
 // fallback is returned. The fallback value is shown in brackets if non-empty.
 func (pr *prompter) Prompt(msg string, fallback string) string {
 	if fallback != "" {
-		hint := fallback
-		if pr.color {
-			hint = style.Apply(hint, style.NoColor, style.Dim)
-		}
+		hint := pr.styler.Apply(fallback, style.NoColor, style.Dim)
 		_, _ = fmt.Fprintf(pr.outW, "%s [%s]: ", msg, hint)
 	} else {
 		_, _ = fmt.Fprintf(pr.outW, "%s: ", msg)
