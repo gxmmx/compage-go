@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gxmmx/compage-go/style"
@@ -341,6 +342,7 @@ func newTestPrinterWithColor(buf *bytes.Buffer) Printer {
 		outW:     buf,
 		errW:     buf,
 		level:    lvl,
+		mu:       &sync.Mutex{},
 		outStyle: style.New(false, nil),
 		errStyle: style.New(false, nil),
 	}
@@ -350,4 +352,41 @@ func newTestPrinterWithColor(buf *bytes.Buffer) Printer {
 func setPrinterLevel(p Printer, lvl slog.Level) Printer {
 	p.SetLevel(lvl)
 	return p
+}
+
+// TestPrinter_ConcurrentWrites verifies that concurrent goroutines writing
+// through a printer and its derived printers (which share the write mutex)
+// never interleave partial lines. Run with -race to also catch data races on
+// the underlying writer.
+func TestPrinter_ConcurrentWrites(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewPrinter(WithOutTo(&buf), WithColor(false))
+	indented := p.WithIndent(1)
+
+	const goroutines = 50
+	const perGoroutine = 20
+
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < perGoroutine; j++ {
+				p.Info("plain-line-content")
+				indented.Info("indented-line-content")
+			}
+		}()
+	}
+	wg.Wait()
+
+	lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
+	wantLines := goroutines * perGoroutine * 2
+	if len(lines) != wantLines {
+		t.Fatalf("expected %d lines, got %d", wantLines, len(lines))
+	}
+	for _, line := range lines {
+		if line != "plain-line-content" && line != "  indented-line-content" {
+			t.Fatalf("torn or unexpected line: %q", line)
+		}
+	}
 }

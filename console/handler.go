@@ -131,6 +131,10 @@ func (h *fanHandler) Enabled(_ context.Context, level slog.Level) bool {
 func (h *fanHandler) Handle(ctx context.Context, r slog.Record) error {
 	for _, ch := range h.handlers {
 		if ch.Enabled(ctx, r.Level) {
+			// Child write errors are intentionally dropped: this is an
+			// infallible console logger, and one failing sink (e.g. a closed
+			// file) must not abort delivery to the others or surface an error
+			// to callers who treat logging as fire-and-forget.
 			_ = ch.Handle(ctx, r.Clone())
 		}
 	}

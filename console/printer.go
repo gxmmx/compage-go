@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
 
 	"github.com/gxmmx/compage-go/style"
 )
@@ -57,15 +58,20 @@ func NewPrinter(opts ...PrinterOption) Printer {
 		outW:     outW,
 		errW:     errW,
 		level:    lvl,
+		mu:       &sync.Mutex{},
 		outStyle: style.New(cfg.suppressColor, outW),
 		errStyle: style.New(cfg.suppressColor, errW),
 	}
 }
 
 type printer struct {
-	outW      io.Writer
-	errW      io.Writer
-	level     *slog.LevelVar
+	outW  io.Writer
+	errW  io.Writer
+	level *slog.LevelVar
+	// mu serializes writes to outW/errW. It is shared by pointer across all
+	// printers derived via WithIndent/WithTextColor so concurrent goroutines
+	// writing through any of them cannot interleave partial lines.
+	mu        *sync.Mutex
 	outStyle  style.Styler
 	errStyle  style.Styler
 	indent    int
@@ -144,6 +150,8 @@ func (p *printer) Table(headers []string, rows [][]string) {
 	if p.level.Level() > slog.LevelInfo {
 		return
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	renderTable(p.outW, headers, rows)
 }
 
@@ -152,10 +160,18 @@ func (p *printer) SetLevel(lvl slog.Level) {
 }
 
 func (p *printer) WithIndent(n int) Printer {
+	return p.withIndent(n)
+}
+
+// withIndent returns a derived *printer with indent increased by n, sharing the
+// same level and write mutex. Used internally where the concrete type is needed
+// (e.g. the slog handler) to avoid an interface type assertion.
+func (p *printer) withIndent(n int) *printer {
 	return &printer{
 		outW:      p.outW,
 		errW:      p.errW,
 		level:     p.level,
+		mu:        p.mu,
 		outStyle:  p.outStyle,
 		errStyle:  p.errStyle,
 		indent:    p.indent + n,
@@ -168,6 +184,7 @@ func (p *printer) WithTextColor(c style.Color) Printer {
 		outW:      p.outW,
 		errW:      p.errW,
 		level:     p.level,
+		mu:        p.mu,
 		outStyle:  p.outStyle,
 		errStyle:  p.errStyle,
 		indent:    p.indent,
@@ -190,6 +207,8 @@ func (p *printer) writeLine(w io.Writer, s style.Styler, marker string, text str
 	text = s.Apply(text, p.textColor)
 
 	indent := p.indentPrefix()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if marker == "" {
 		_, _ = fmt.Fprintf(w, "%s%s\n", indent, text)
 	} else {
@@ -198,6 +217,8 @@ func (p *printer) writeLine(w io.Writer, s style.Styler, marker string, text str
 }
 
 func (p *printer) writeRaw(w io.Writer, s string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	_, _ = fmt.Fprint(w, s)
 }
 

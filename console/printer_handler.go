@@ -67,7 +67,7 @@ func (h *printerHandler) Handle(_ context.Context, r slog.Record) error {
 
 	target := h.p
 	if hints.indent > 0 {
-		target = target.WithIndent(hints.indent).(*printer)
+		target = target.withIndent(hints.indent)
 	}
 
 	switch {
