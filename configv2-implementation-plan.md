@@ -26,6 +26,14 @@ The implementation will not include:
 - preservation of unknown keys, comments, or original formatting on save;
 - a separate reflection-free `configlite` API.
 
+Configuration is explicitly passed through the application. The package does not
+provide or manage a global configuration singleton. Applications should pass the
+value returned by `Values()` to components that only need startup configuration,
+preferably passing only the relevant sub-struct. Components that need to observe or
+change configuration may receive the config object or a narrow application-defined
+interface instead. This keeps dependencies explicit and makes testing independent
+of process-global state.
+
 ## 3. Resolution model
 
 Sources are layered from lowest to highest precedence:
@@ -34,9 +42,14 @@ Sources are layered from lowest to highest precedence:
 default < file < env < flag < set
 ```
 
-Each invocation loads at most one file. File discovery checks an ordered candidate
-list and loads the first existing candidate. The first configured candidate is always
-the save target, even when a later candidate was the one found and loaded.
+Each invocation loads at most one file. This iteration accepts one explicit file
+target and loads it when it exists. An optional environment-selected file path may
+take precedence over that explicit target. File merging, ordered fallback candidates,
+and multi-file composition are deferred to a future feature.
+
+Configured paths expand environment variables and a leading `~`/`~/...` before
+file evaluation and save-target selection. Expansion is limited to these forms; the
+package does not perform general shell parsing.
 
 Every resolved value carries its winning source label. Typical labels are:
 
@@ -69,7 +82,9 @@ Rules:
 - Duplicate config keys and duplicate explicit flags are registry errors.
 
 `save:"true"` defines the normal curated file surface. Fields without `save` remain
-loadable but are not included in ordinary generated configuration output.
+loadable but are not included in ordinary generated configuration output. The tag
+means that a field is eligible for normal persistence; source rules and sensitive
+value safeguards still determine whether it is written.
 
 ## 5. File presence, generation, and required-field lifecycle
 
@@ -80,19 +95,29 @@ can be intentionally file-free and use only defaults, environment, and/or flags.
 File presence is observable state:
 
 ```go
-cfg.FileLoaded() // true when a candidate file was found and successfully loaded
+cfg.FileLoaded() // true when the selected file was found and successfully loaded
 cfg.Path()       // selected file, or the configured save target when none was found
 ```
 
-If a configured candidate path does not exist, `FileLoaded()` is false even though a
-save target is available. The application may then decide to generate a file. The
-configuration package does not infer that file absence means generation is wanted.
+If the selected file does not exist, `FileLoaded()` is false even though a save target
+is available. The application may then decide to generate a file. The configuration
+package does not infer that file absence means generation is wanted.
+
+When `WithConfigEnv` names a non-empty environment variable, its expanded path is
+the selected file and the save target. Otherwise, `WithFile` supplies the selected
+file and save target. If neither is configured, the package operates filelessly and
+`Save()` returns `ErrNoConfigFile`. The file format is inferred from the path
+extension; supported extensions are `.toml`, `.yaml`, `.yml`, and `.json`.
+
+The package does not distinguish system-owned from user-owned configuration paths,
+does not elevate privileges, and does not change ownership. Applications choose an
+appropriate path; normal filesystem permissions determine whether saving succeeds.
 
 The high-level load sequence is:
 
 1. Build and validate the struct registry.
 2. Create the defaults layer.
-3. Resolve the ordered candidate paths and load the first existing file, if any.
+3. Resolve the selected file path and load it if it exists.
 4. Record `FileLoaded`, the selected file path, and the file layer provenance.
 5. Read environment values into the environment layer.
 6. Read changed flags into the flag layer.
@@ -138,18 +163,23 @@ The normal save selection rule is:
 - include fields marked `save:"true"` when their effective source is `default`, `file`,
   or `set`;
 - exclude values sourced only from `env` or `flag`, since those are transient;
-- include a field changed through `Set` even when it lacks `save:"true"`;
 - preserve the existing sensitive-value safeguards.
+
+`Save()` always writes a fresh document containing all currently eligible fields; it
+is not a partial patch operation. A transient value is never persisted merely because
+it won resolution. If an application wants to persist a value obtained from an env
+variable, flag, query, or another external source, it must explicitly call `Set()`
+with that value and then call `Save()`. This explicit promotion prevents transient
+secrets from silently becoming durable configuration.
 
 When no file was loaded, generated output contains default-backed curated fields, while excluding
 environment- and flag-only values. Values obtained during bootstrap with `Set` are
-persisted, and an explicit CLI `config set` can persist a single field regardless of
-its `save` tag.
+persisted when the field is marked `save:"true"`, and an explicit CLI `config set`
+can persist a single writable field.
 
-The exact interaction between `sensitive` and default-backed values must be decided
-before Save is implemented. The conservative rule is that sensitive values are only
-written when sourced from `file` or explicitly changed through `Set`, never from env,
-flag, or an implicit default.
+Sensitive values are only written when sourced from `file` or explicitly changed
+through `Set`, never from env, flag, or an implicit default. Permissions are based on
+whether a sensitive value is actually written.
 
 Writes use an atomic temporary-file-and-rename sequence. Permissions are `0600` when
 sensitive data is written and `0644` otherwise, subject to platform behavior.
@@ -178,6 +208,8 @@ nested map for Save. Do not implement a parser from scratch.
 
 Store ordered labeled layers and resolve keys from high to low precedence. Keep source
 presence distinct from zero values. Provide atomic replacement for a completed load.
+The store must retain per-layer presence independently of the winning source, so the
+API can distinguish a value winning from `flag` while also being present in `file`.
 
 ### 7.5 Loaders
 
@@ -198,21 +230,51 @@ later strict validation after application-provided `Set` calls.
 
 ### 7.8 Persistence
 
-Select the first configured candidate as the save target, select the format, construct
-only eligible output fields, encode a fresh document, and atomically replace the
-target.
+Select the configured file as the save target, select the format from its extension,
+construct only eligible output fields, encode a fresh document, and atomically
+replace the target.
 
 ### 7.9 Public API
 
-Provide the v1-shaped API: `New[T]`, `Load[T]`, `Values`, `Source`, `Set`, `Save`,
-`FileLoaded`, `Path`/`Paths`, `Validate`, and `FlushLog`. Map-returning APIs must not
-expose mutable internal state; return copies or immutable snapshots.
+Provide the v1-shaped API: `New[T]`, `Load[T]`, `Values`, `Source`, `HasSource`, `Set`, `Save`,
+`FileLoaded`, `Path`, `Validate`, and `FlushLog`. File configuration consists of
+`WithFile(path)` and `WithConfigEnv(envVar)`; there are no directory-search,
+name, or type options in this iteration. `Values()` is a point-in-time read: each
+call returns its own copy of the currently resolved values and never exposes the
+configuration object's internally stored value for mutation. The package does not
+provide automatic change notifications or hot reload in this iteration.
+
+The intended application wiring is dependency-injected rather than global:
+
+```go
+cfg, err := configv2.Load[AppConfig](...)
+if err != nil {
+    return err
+}
+
+app := NewApp(cfg.Values())
+```
+
+Startup-only components should receive the relevant configuration value or
+sub-struct. Components that need runtime reads or mutation may receive `Config[T]`
+or, preferably, a narrow application-defined interface such as:
+
+```go
+type ConfigReader interface {
+    Values() AppConfig
+    Source(string) string
+}
+```
+
+The package must not require callers to retrieve configuration through global
+state.
 
 ## 8. Implementation order
 
 ### P0 — Package scaffolding
 
-- Create `configv2/` beside v1.
+- Create `configv2/` as the replacement package; retain `config-old/` only as a
+  behavior reference.
 - Define package boundaries and public error types.
 - Define source labels, field metadata, layer, and candidate-path types.
 - Add baseline tests and decide whether format adapters live in subpackages.
@@ -249,12 +311,15 @@ expose mutable internal state; return copies or immutable snapshots.
 - Define the generic flag-source interface.
 - Add changed-flag filtering and coercion tests.
 
-### P6 — File discovery
+### P6 — File selection and loading
 
-- Implement ordered candidate lookup.
-- Load only the first existing file.
+- Implement selection between the environment-provided file and the explicit file
+  option.
+- Load at most one existing file.
 - Track `FileLoaded`, selected file path, and file provenance.
+- Infer the format from the file extension.
 - Define behavior for missing paths, unsupported extensions, and parse errors.
+- Expand environment variables and a leading home-directory shorthand in paths.
 
 ### P7 — Decoder
 
@@ -296,12 +361,11 @@ expose mutable internal state; return copies or immutable snapshots.
 ## 9. Decisions still requiring confirmation
 
 - Exact bootstrap API: explicit load option versus separate `Validate` lifecycle.
-- Exact precedence among explicit path, environment path, and search paths.
-- Whether a parse error stops discovery immediately.
-- Format selection and extension override behavior.
-- Sensitive default persistence rule.
-- Whether Save includes all fields changed by `Set` in the current process or all fields
-  whose current winning source is `set`.
+- A non-empty environment-provided file path takes precedence over `WithFile`.
+- A parse error or unsupported format on the selected existing file stops loading
+  immediately.
+- Whether ordered fallback candidates should be added in a later iteration.
+- Exact shape of per-layer source inspection such as `HasSource`.
 - Exact shape of `Values`, `Source`, and `FileLoaded`.
 - Generic flag-source interface shape.
 
