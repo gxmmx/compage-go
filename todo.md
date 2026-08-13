@@ -50,7 +50,7 @@ layer store + registry(save/sensitive tags) → select writable keys
 ```
 
 The **layer store** is the centerpiece and what replaces both vipers: an ordered set
-of named layers (`default`, `file:system`, `file:user`, `env`, `flag`, `set`, …). A
+of named layers (`default`, `file`, `env`, `flag`, `set`, …). A
 lookup walks layers by precedence and returns `(value, winningLayer)`. Provenance is
 just the winning layer's label — no second parse needed.
 
@@ -88,9 +88,10 @@ encode `map[string]any` → bytes. Both directions (Save needs encode).
 ### D. Layer store & resolution engine  ← **replaces dual-viper**
 An ordered list of layers; each layer is `{label string, values map[string]any}`.
 - `resolve(key) → (value, label)`: first hit walking high→low precedence.
-- Precedence (low→high), matching v1: `default < file(s) < env < flag < set`.
+- Precedence (low→high), matching v1: `default < file < env < flag < set`.
 - Provenance = winning label. Kills the `filev` second-parse entirely.
-- *Open:* how multi-file layers order among themselves (see §5.1).
+- Each invocation loads at most one file. Candidate paths are checked in order; the
+  first existing file becomes the file layer and its path is part of provenance.
 - *Ref:* v1's `Config.v` + `Config.filev`, `determineSource`, `buildSourceMap`.
 
 ### E. Decoder (`map`/store → struct via `cfg` tag)  ← **replaces mapstructure**
@@ -109,12 +110,12 @@ type, set it.
 - **Defaults** from registry → base layer.
 - **Env** per `fieldMeta.env` via `os.LookupEnv` → env layer (also drives provenance).
 - **Flags** via the generic flag source (§ G) → flag layer (only "changed" flags win).
-- **Files** via discovery/modes (§5.1) → one or more file layers.
+- **Files** via ordered discovery (§5.1) → at most one file layer.
 - **Set** (runtime) → top layer.
 - *Ref:* v1 `Load()` tier wiring in `config/config.go:77–174`.
 
 ### G. Flag adapter (generic core + pflag generator)  ← **focus area, §5.3**
-### H. File discovery & loading modes  ← **focus area, §5.1**
+### H. File discovery & loading  ← **focus area, §5.1**
 ### I. Save / persistence with source control  ← **focus area, §5.2**
 
 ### J. Required validation
@@ -142,26 +143,24 @@ Keep v1's shape so migration is mechanical.
 
 ## 5. Focus areas (need deeper planning — decisions flagged)
 
-### 5.1 File discovery & loading modes  *(component H)*
-v1 supports three *discovery* modes (explicit path / search paths / none). v2 must also
-support multi-file **composition** modes. Candidate set (to be finalized in planning):
+### 5.1 File discovery & loading  *(component H)*
+Each config invocation loads at most one file. The loader may query an ordered list of
+candidate paths, such as an explicit path, an environment-provided path, and search
+paths. The **first existing candidate** is loaded; later candidates are ignored.
 
-1. **Single file** — explicit path, `ConfigEnv` path, or first-found in search paths
-   (v1 behavior).
-2. **System + user (merge)** — load system config, then deep-merge user config on top
-   (user keys win per-key; unset user keys fall back to system).
-3. **User only** — ignore system even if present.
-4. **System vs user (whole-file precedence, no merge)** — if a user file exists, it
-   fully replaces system; else system. No per-key merge.
-5. **Piecemeal (merge all found)** — every file found across configured locations is
-   loaded and merged as its own layer, in a defined order (all-found, not first-found).
+There is no system-vs-user distinction, no file merging, and no multi-file composition.
+The selected file is labeled with its path for provenance (for example,
+`file:/path/config.toml`).
+
+The first path defined in the candidate list is always the save target. If it does not
+exist, `Save()` may create it; if it does exist, it is loaded and saved. Other existing
+candidates are never modified.
 
 **Open decisions:**
-- Merge semantics: deep per-key merge vs. whole-file replace — per mode, or configurable?
-- How modes are expressed in the API (an explicit mode enum + role-tagged paths, e.g.
-  `WithSystemPath`/`WithUserPath`, vs. a general ordered `WithLayer` list?).
-- How each file maps to a layer label for provenance (§ D).
-- "Some different types" of config the user mentioned — clarify in planning.
+- Exact precedence when combining explicit paths, environment paths, and search paths.
+- Whether unsupported extensions and parse errors should stop discovery or be reported
+  immediately.
+- Behavior when no candidate path is configured.
 - *Ref:* `config/resolve.go` (`resolveFileSetup`, `storePath`, `inferFileType`).
 
 ### 5.2 Registry with source control & Save  *(components I + D)*
@@ -170,22 +169,16 @@ each at its resolved value (defaults included for exposed fields); unmarked fiel
 never written; `sensitive`/transient are guarded. No scaffold mode. So *what* and
 *whether-defaults* are decided.
 
-What remains is **where**, in multi-file modes: when a value could belong to more than
-one file (e.g. system + user both loaded, user overrides three keys), which file does a
-changed key save back to?
-- Provenance from the layer store (§ D) gives each key's origin file → the natural
-  round-trip target (a key that came from the user file saves back to the user file).
-- The tricky case (from the user): a key whose value is currently a system-file value or
-  a default, now changed by the user — do **not** rewrite system config; instead write
-  the new key into the **user** file as an override. So the write target for a change is
-  "the user/highest-writable layer," not necessarily the origin layer.
+The save target is always the first configured candidate path, regardless of which
+source supplied an individual value. Since only one file is loaded per invocation,
+there is no per-key file routing or multi-file override behavior.
 - Mechanics reused from v1: atomic temp+rename; `0600` if any sensitive field written,
   else `0644`.
 
 **Open decisions (for the P9 dive):**
-- Designating the writable target file/layer (role-tagged, e.g. the "user" layer is
-  writable; system is read-only?), and whether a field can override where it writes.
-- Which *sane subset* of multi-file cases we support — not every combination.
+- Whether `Save()` is allowed when no candidate path was configured.
+- Whether the selected file's format is inferred from its extension or can be explicitly
+  overridden.
 - *Ref:* `config/config.go:236–318` (`Save`, `writePath`), `resolve.go:storePath`.
 
 ### 5.3 Flags: generic core + pflag generator  *(component G)*
@@ -286,12 +279,12 @@ Each phase builds on the prior and can be tested in isolation. Order mirrors v1'
   dual-viper replacement.
 - **P5 — Loaders: defaults + env + generic flags (F, G-core).** Feed layers; flag source
   interface (no pflag yet).
-- **P6 — File discovery & modes (H, §5.1).** Single-file first, then composition modes.
+- **P6 — File discovery (H, §5.1).** Ordered candidate lookup with first-found loading.
 - **P7 — Decoder (E).** Store → `T` with type coercion via `cfg`.
 - **P8 — Load orchestration + required validation (J) + concurrency (K).** Wire P1–P7
   into `Load()`; source-based required check; mutex.
-- **P9 — Save with source control (I, §5.2).** Write-target selection, save/sensitive
-  rules, atomic write.
+- **P9 — Save with source control (I, §5.2).** First-candidate target selection,
+  save/sensitive rules, atomic write.
 - **P10 — pflag adapter + flag generator (G, §5.3).** Separate subpackage.
 - **P11 — Public API polish (L), README, tests, migrate callers.**
 
@@ -306,7 +299,6 @@ Each phase builds on the prior and can be tested in isolation. Order mirrors v1'
 
 **Still open (by phase):**
 - **Schema / tag structure (§8)** — *active deep-dive; gates the registry.*
-- Loading modes: final set + per-mode merge semantics + API surface (§5.1) — *deep-dive when we reach P6.*
-- Multi-file Save source-control: how to know a value's origin file and route the save
-  correctly; sane subset of cases, not all combinations (§5.2) — *dedicated deep-dive with P9.*
+- File discovery: candidate ordering and no-file behavior (§5.1) — *deep-dive when we reach P6.*
+- Save target: first configured candidate path; no per-key file routing (§5.2).
 - Generic flag-source interface shape + generator output form (§5.3).
