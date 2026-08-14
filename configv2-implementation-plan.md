@@ -26,6 +26,12 @@ The implementation will not include:
 - preservation of unknown keys, comments, or original formatting on save;
 - a separate reflection-free `configlite` API.
 
+Configuration errors participate in the repository-wide semantic error model defined
+by the sibling `errors/` package. Go does not provide error inheritance, so config
+errors implement the shared error contract and wrap shared semantic categories where
+appropriate. This lets applications use generic error handling while retaining
+config-specific context.
+
 Configuration is explicitly passed through the application. The package does not
 provide or manage a global configuration singleton. Applications should pass the
 value returned by `Values()` to components that only need startup configuration,
@@ -113,6 +119,14 @@ The package does not distinguish system-owned from user-owned configuration path
 does not elevate privileges, and does not change ownership. Applications choose an
 appropriate path; normal filesystem permissions determine whether saving succeeds.
 
+`New()` is an error-free construction step: it stores options and creates the
+configuration object but does not build the registry or load any source. The first
+phase of `Load()` validates option-level configuration, including validator names,
+nil validator functions, duplicate validator registrations, and file options. These
+errors are added to the initialization log buffer and returned from `Load()` before
+source loading begins. Schema-dependent errors, such as an unknown
+`validate:"name"` tag, are also detected during the registry phase of `Load()`.
+
 The high-level load sequence is:
 
 1. Build and validate the struct registry.
@@ -124,27 +138,19 @@ The high-level load sequence is:
 7. Add any initial runtime `Set` layer values.
 8. Resolve each field using `default < file < env < flag < set`.
 9. Decode resolved values into the typed configuration.
-10. Run required validation according to the selected load mode.
+10. Run semantic validators for present values and required validation according to
+    the selected load mode.
 11. Publish the completed state atomically.
 
-Structural errors, file errors, and present-but-invalid type conversions always fail
-the load. Required validation may be strict or deferred according to an explicit API
-choice; file absence alone must not silently change the validation policy.
+Structural errors, file errors, missing required values, present-but-invalid type
+conversions, and failed semantic validators always fail the load. There is no
+incomplete-load mode in this iteration; applications that need a missing value must
+report the required flag/env/input and retry on a later process invocation. A failed
+load never partially mutates an already loaded configuration.
 
 Required validation is source-based, not zero-value-based. A supplied `0`, `false`, or
 empty string counts as supplied when its source is present. A required field without a
 source is missing.
-
-For an application that wants to generate a file after querying required values, the
-workflow is:
-
-1. Load with an explicit allow-incomplete mode, or use an API that defers required
-   validation.
-2. Check `FileLoaded() == false`.
-3. Query or obtain missing required values.
-4. Call `Set` for each obtained value.
-5. Call strict `Validate()`.
-6. Call `Save()`.
 
 The default `save:"true"` tag is sufficient to define the normal generated file
 surface; a separate generation tag is not needed. On an explicit `Save`, fields marked
@@ -171,6 +177,19 @@ it won resolution. If an application wants to persist a value obtained from an e
 variable, flag, query, or another external source, it must explicitly call `Set()`
 with that value and then call `Save()`. This explicit promotion prevents transient
 secrets from silently becoming durable configuration.
+
+Validation is divided into three operations:
+
+- `Load()` performs type coercion, semantic validation for every present value, and
+  required-field validation before publishing the completed state.
+- `Set(key, value)` coerces and semantically validates only the changed field. The
+  layer and resolved value are updated only after validation succeeds; invalid input
+  leaves the existing configuration unchanged.
+- `Validate()` performs a read-only full validation of the current configuration,
+  rerunning semantic validators and required-field checks without mutating state.
+
+Semantic validators are not called for absent optional fields. Required validation is
+source-based, so a present zero value is valid when its source is present.
 
 When no file was loaded, generated output contains default-backed curated fields, while excluding
 environment- and flag-only values. Values obtained during bootstrap with `Set` are
@@ -225,16 +244,63 @@ defined.
 
 ### 7.7 Validation
 
-Implement required validation separately enough to support explicit allow-incomplete mode and
-later strict validation after application-provided `Set` calls.
+Applications define semantic validators and register them with `WithValidator(name,
+fn)`. A field selects one with `validate:"name"`. Duplicate validator names, invalid
+validator registrations, and unknown validator names are configuration errors and the
+unknown or duplicate validator is never run. Validator failures include field, key,
+and validator name context.
 
-### 7.8 Persistence
+The log buffer is an initialization diagnostic channel. It buffers debug, warning,
+and error records produced while constructing the registry and loading configuration,
+including errors that are also returned to the caller. Buffered logging does not
+replace error returns. `Load()` returns an error for any blocker and must not publish
+an invalid state. It may return the constructed `*Config` alongside the error so
+callers can flush diagnostics before handling the failure.
+
+Runtime methods do not append to the initialization log buffer. `Set()`, `Save()`,
+`Values()`, `Source()`, `HasSource()`, and `Validate()` return or expose their runtime
+results directly. `Set()` and `Save()` return errors; failed operations leave
+configuration state unchanged. `Set()` is rejected before a successful load.
+
+Applications must handle returned errors and decide whether to retry, report, or exit.
+The package does not silently continue after unrecoverable configuration errors. A
+caller may construct a logger after a failed load and call `FlushLog`; if the logger
+itself depends on valid configuration, diagnostics must instead be flushed to an
+earlier/preconfigured logger or other fallback sink. `FlushLog` is idempotent and
+clears the buffered records after a successful flush.
+
+### 7.8 Error model
+
+The sibling `errors/` package defines the repository-wide semantic error contract and
+stable categories/codes. Config-specific errors wrap the nearest shared domain error,
+such as `FileNotFound`, while retaining structured context such as field, key, source,
+expected type, actual value, validator, and path. Shared errors own their semantic
+classification: `FileNotFound` itself wraps or exposes `NotFound`. Config does not
+need to know how that semantic parent is implemented.
+
+Examples include `ConfigFileNotFound` wrapping shared `FileNotFound`, a config decode
+error wrapping shared `Invalid`, and a required-field error wrapping shared
+`Required`. An application may add an outer application wrapper without losing
+`errors.Is`/`errors.As` access to either the config context or shared semantic
+category. See
+`errors-implementation-plan.md` for the repository-wide contract and chain rules.
+
+Callers use `errors.Is` for stable sentinel conditions and `errors.As` for structured
+config errors or the shared semantic error interface. Initialization errors are both
+returned and recorded in the config log buffer; runtime errors are returned directly
+and are not buffered. Failed operations never partially mutate configuration state.
+
+The shared error model may provide transport mappings such as HTTP status codes, but
+the config package remains transport-agnostic. HTTP or other protocol adapters map
+semantic categories to transport responses outside the config package.
+
+### 7.9 Persistence
 
 Select the configured file as the save target, select the format from its extension,
 construct only eligible output fields, encode a fresh document, and atomically
 replace the target.
 
-### 7.9 Public API
+### 7.10 Public API
 
 Provide the v1-shaped API: `New[T]`, `Load[T]`, `Values`, `Source`, `HasSource`, `Set`, `Save`,
 `FileLoaded`, `Path`, `Validate`, and `FlushLog`. File configuration consists of
@@ -268,6 +334,28 @@ type ConfigReader interface {
 
 The package must not require callers to retrieve configuration through global
 state.
+
+The construction and loading API is:
+
+```go
+cfg := configv2.New[AppConfig](opts...)
+if err := cfg.Load(); err != nil {
+    // Flush initialization diagnostics, then handle the returned blocker.
+}
+```
+
+The package-level convenience function is equivalent to constructing and loading:
+
+```go
+func Load[T any](opts ...Option) (*Config[T], error) {
+    cfg := New[T](opts...)
+    return cfg, cfg.Load()
+}
+```
+
+`New()` does not perform validation that could fail. All option, registry, source,
+decoding, and initialization validation begins in `Load()`, ensuring failures can be
+returned and recorded in one initialization diagnostic sequence.
 
 ## 8. Implementation order
 
@@ -330,8 +418,8 @@ state.
 ### P8 — Orchestration, required validation, and concurrency
 
 - Implement strict load behavior.
-- Implement explicit allow-incomplete/deferred-required behavior.
-- Add `Validate()` for post-bootstrap validation.
+- Add read-only `Validate()` for explicit whole-configuration checks and future
+  extensibility.
 - Add mutex protection and atomic state replacement.
 - Ensure failed loads do not partially mutate active configuration.
 
@@ -360,7 +448,6 @@ state.
 
 ## 9. Decisions still requiring confirmation
 
-- Exact bootstrap API: explicit load option versus separate `Validate` lifecycle.
 - A non-empty environment-provided file path takes precedence over `WithFile`.
 - A parse error or unsupported format on the selected existing file stops loading
   immediately.
