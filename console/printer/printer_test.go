@@ -30,6 +30,27 @@ func TestPrinter_Info(t *testing.T) {
 	}
 }
 
+// TestMain makes color-output tests independent of the caller's NO_COLOR
+// preference. The style package has dedicated tests for NO_COLOR itself.
+func TestMain(m *testing.M) {
+	value, wasSet := os.LookupEnv("NO_COLOR")
+	if err := os.Unsetenv("NO_COLOR"); err != nil {
+		panic(err)
+	}
+
+	code := m.Run()
+	var err error
+	if wasSet {
+		err = os.Setenv("NO_COLOR", value)
+	} else {
+		err = os.Unsetenv("NO_COLOR")
+	}
+	if err != nil {
+		panic(err)
+	}
+	os.Exit(code)
+}
+
 func TestPrinter_Success(t *testing.T) {
 	var buf bytes.Buffer
 	p := New(withWriters(&buf, &buf), WithColor(false))

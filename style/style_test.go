@@ -2,8 +2,30 @@ package style
 
 import (
 	"bytes"
+	"os"
 	"testing"
 )
+
+// TestMain makes tests that exercise active styling independent of the
+// developer's NO_COLOR preference. Tests for that preference set it explicitly.
+func TestMain(m *testing.M) {
+	value, wasSet := os.LookupEnv("NO_COLOR")
+	if err := os.Unsetenv("NO_COLOR"); err != nil {
+		panic(err)
+	}
+
+	code := m.Run()
+	var err error
+	if wasSet {
+		err = os.Setenv("NO_COLOR", value)
+	} else {
+		err = os.Unsetenv("NO_COLOR")
+	}
+	if err != nil {
+		panic(err)
+	}
+	os.Exit(code)
+}
 
 func TestNew_NilWriter_Active(t *testing.T) {
 	s := New(false, nil)
