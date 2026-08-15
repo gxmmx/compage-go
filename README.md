@@ -20,6 +20,19 @@ generic where it doesn't (no framework lock-in, no runtime magic).
 go get github.com/gxmmx/compage-go
 ```
 
+## Development checks
+
+With [Task](https://taskfile.dev/) installed, run the complete verification workflow:
+
+```bash
+task check
+```
+
+`task test` runs uncached tests across the repository and `task test:race` runs the
+same suite with Go's race detector. Target one package directory with a wildcard task:
+`task test:config` or `task test:race:config`. `task check` additionally runs format,
+vet, and the config fuzz targets.
+
 ## Quick start
 
 ### Logging
@@ -47,12 +60,13 @@ type AppConfig struct {
 }
 
 cfg, err := config.Load[AppConfig](
-    config.WithPath("/etc/myapp"),
+    config.WithFile("/etc/myapp/config.toml"),
     config.WithEnvPrefix("MYAPP"),
 )
 
 fmt.Println(cfg.Values().Port)       // resolved value
-fmt.Println(cfg.Source("port"))      // "flag", "env", "file", or "default"
+source, _ := cfg.Source("port")
+fmt.Println(source)                  // flag, env, file, default, or set
 ```
 
 ### Terminal output

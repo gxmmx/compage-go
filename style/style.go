@@ -11,7 +11,7 @@ import (
 type Color int
 
 const (
-	NoColor       Color = iota
+	NoColor Color = iota
 	Red
 	Green
 	Yellow
@@ -32,7 +32,7 @@ const (
 type Mod int
 
 const (
-	Bold      Mod = iota + 1
+	Bold Mod = iota + 1
 	Dim
 	Italic
 	Underline
