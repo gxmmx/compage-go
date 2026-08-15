@@ -26,6 +26,13 @@ tasks:
     cmds:
       - go test -race -count=1 ./...
 
+  test:coverage:config:
+    desc: Write and report per-function coverage for the config package
+    cmds:
+      - mkdir -p .dist/coverage
+      - go test -count=1 -coverprofile=.dist/coverage/config.out ./config
+      - go tool cover -func=.dist/coverage/config.out
+
   test:fuzz:
     desc: Run each config fuzz target briefly
     cmds:

@@ -24,7 +24,11 @@ func formatForExtension(extension string) (formatAdapter, bool) {
 	}
 }
 
-func flatten(prefix string, in map[string]any, out map[string]any) error {
+// flatten turns a format document into leaf values while retaining invalid
+// object values at scalar/unknown keys.  Retaining those values is important:
+// dropping an empty object would make {"unknown": {}} indistinguishable from
+// an absent key.
+func flatten(prefix string, in map[string]any, out map[string]any, leaves, namespaces map[string]bool) error {
 	for key, value := range in {
 		if key == "" || strings.Contains(key, ".") {
 			return fmt.Errorf("invalid key %q", key)
@@ -35,7 +39,14 @@ func flatten(prefix string, in map[string]any, out map[string]any) error {
 		}
 		switch nested := value.(type) {
 		case map[string]any:
-			if err := flatten(fullKey, nested, out); err != nil {
+			if leaves[fullKey] || len(nested) == 0 && !namespaces[fullKey] {
+				if _, exists := out[fullKey]; exists {
+					return fmt.Errorf("duplicate key %q", fullKey)
+				}
+				out[fullKey] = nested
+				continue
+			}
+			if err := flatten(fullKey, nested, out, leaves, namespaces); err != nil {
 				return err
 			}
 		case map[any]any:

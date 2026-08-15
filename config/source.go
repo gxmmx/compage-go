@@ -1,7 +1,5 @@
 package config
 
-import "fmt"
-
 // Source identifies a configuration layer.
 type Source uint8
 
@@ -69,11 +67,4 @@ func cloneLayers(in map[Source]map[string]any) map[Source]map[string]any {
 		out[source] = cloneRaw(in[source])
 	}
 	return out
-}
-
-func validSource(source Source) error {
-	if source < SourceDefault || source > SourceSet {
-		return fmt.Errorf("invalid source %d", source)
-	}
-	return nil
 }

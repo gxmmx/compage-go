@@ -11,7 +11,7 @@ import (
 	"github.com/gxmmx/compage-go/errx"
 )
 
-func loadFile(o options) (string, bool, map[string]any, error) {
+func loadFile(o options, r registry) (string, bool, map[string]any, error) {
 	p := o.file
 	if o.configEnv != "" {
 		if v, ok := os.LookupEnv(o.configEnv); ok && v != "" {
@@ -56,8 +56,16 @@ func loadFile(o options) (string, bool, map[string]any, error) {
 	if err != nil {
 		return "", false, nil, fileErr("parse file", errx.Invalid, p, err, false)
 	}
+	leaves, namespaces := map[string]bool{}, map[string]bool{}
+	for _, field := range r.fields {
+		leaves[field.key] = true
+		components := strings.Split(field.key, ".")
+		for i := 1; i < len(components); i++ {
+			namespaces[strings.Join(components[:i], ".")] = true
+		}
+	}
 	flat := map[string]any{}
-	if err := flatten("", root, flat); err != nil {
+	if err := flatten("", root, flat, leaves, namespaces); err != nil {
 		return "", false, nil, fileErr("decode file", errx.Invalid, p, err, false)
 	}
 	return p, true, flat, nil
@@ -106,7 +114,7 @@ func (c *Config[T]) Save() error {
 		return fileErr("encode file", errx.Internal, st.path, err, false)
 	}
 	if info, e := os.Lstat(st.path); e == nil && !info.Mode().IsRegular() {
-		return fileErr("unsafe save target", errx.Conflict, st.path, nil, false)
+		return fileErr("unsafe save target", errx.Internal, st.path, nil, false)
 	} else if e != nil && !errors.Is(e, fs.ErrNotExist) {
 		return fileErr("stat save target", errx.Internal, st.path, e, true)
 	}

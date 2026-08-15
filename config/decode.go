@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"time"
@@ -11,6 +12,9 @@ import (
 func coerce(raw any, t reflect.Type) (reflect.Value, error) {
 	if reflect.TypeOf(raw) == t {
 		v := reflect.ValueOf(raw)
+		if t == reflect.TypeFor[float64]() && !finite(v.Float()) {
+			return reflect.Value{}, fmt.Errorf("non-finite float")
+		}
 		if t == reflect.TypeFor[[]string]() {
 			v = reflect.ValueOf(append([]string(nil), raw.([]string)...))
 		}
@@ -18,6 +22,12 @@ func coerce(raw any, t reflect.Type) (reflect.Value, error) {
 	}
 	s, ok := raw.(string)
 	if !ok {
+		// File formats preserve scalar types. A string field accepts only a
+		// format-native string; silently formatting numbers and booleans would
+		// turn a schema/type error into a surprising configuration value.
+		if t == reflect.TypeFor[string]() {
+			return reflect.Value{}, fmt.Errorf("expected string")
+		}
 		switch n := raw.(type) {
 		case json.Number:
 			s = n.String()
@@ -71,13 +81,15 @@ func coerce(raw any, t reflect.Type) (reflect.Value, error) {
 	case reflect.Float64:
 		var x float64
 		x, err = strconv.ParseFloat(s, 64)
-		if err == nil && (x != x || x > 1.7976931348623157e308 || x < -1.7976931348623157e308) {
+		if err == nil && !finite(x) {
 			err = fmt.Errorf("non-finite float")
 		}
 		v.SetFloat(x)
 	}
 	return v, err
 }
+
+func finite(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
 
 func cloneValue[T any](in T) T { v := reflect.ValueOf(&in).Elem(); cloneReflect(v); return in }
 func cloneReflect(v reflect.Value) {

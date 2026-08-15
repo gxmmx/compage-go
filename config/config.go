@@ -37,6 +37,7 @@ func (c *Config[T]) Load() (err error) {
 	if err != nil {
 		return err
 	}
+	c.logs.add(newLogRecord(slog.LevelDebug, "config options applied"))
 	r, err := makeRegistry[T](o)
 	if err != nil {
 		return err
@@ -61,7 +62,7 @@ func (c *Config[T]) Load() (err error) {
 			layers[SourceDefault][f.key] = f.def
 		}
 	}
-	path, fileLoaded, fileLayer, err := loadFile(o)
+	path, fileLoaded, fileLayer, err := loadFile(o, r)
 	if err != nil {
 		return err
 	}
@@ -92,6 +93,11 @@ func (c *Config[T]) Load() (err error) {
 			}
 		}
 	}
+	sourcesRecord := newLogRecord(slog.LevelDebug, "config sources discovered")
+	for _, source := range []Source{SourceDefault, SourceFile, SourceEnv, SourceFlag, SourceSet} {
+		sourcesRecord.AddAttrs(slog.Int(source.String(), len(layers[source])))
+	}
+	c.logs.add(sourcesRecord)
 	st, err := resolve[T](r, layers, path, fileLoaded, o.validators)
 	if err != nil {
 		return err
