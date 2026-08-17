@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,6 +17,17 @@ type testDirectoryProvider struct{ bases AppDirectories }
 func (p testDirectoryProvider) directoryBases(Scope, string) (AppDirectories, error) {
 	return p.bases, nil
 }
+
+type directoryTestBackend struct{ testDirectoryProvider }
+
+func (directoryTestBackend) validate(specification) error { return nil }
+func (directoryTestBackend) ensure(context.Context, *operation) (EnsureResult, error) {
+	return EnsureResult{}, nil
+}
+func (directoryTestBackend) start(context.Context, *operation) error            { return nil }
+func (directoryTestBackend) stop(context.Context, *operation) error             { return nil }
+func (directoryTestBackend) uninstall(context.Context, *operation) error        { return nil }
+func (directoryTestBackend) status(context.Context, *operation) (Status, error) { return Status{}, nil }
 
 func TestResolveUserDirectoriesUsesExplicitNamesVerbatim(t *testing.T) {
 	p := testDirectoryProvider{bases: AppDirectories{Runtime: "/home/alice", Config: "/home/alice", State: "/home/alice", Logs: "/home/alice"}}
@@ -92,6 +104,25 @@ func TestDirectoryResolutionCombinations(t *testing.T) {
 	}
 }
 
+func TestPublicDirectoriesMatchesUserServiceResolution(t *testing.T) {
+	name := "worker"
+	if host.Platform().OS == host.Darwin {
+		name = "com.example.worker"
+	}
+	u, err := host.User()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := Directories(name, WithLogDir(), WithStderrLog("foo.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(u.Home, "."+name)
+	if d.Config != config || d.Logs != filepath.Join(config, "log") {
+		t.Fatalf("directories=%+v", d)
+	}
+}
+
 func TestSystemDirectoryNamesAreAppliedByService(t *testing.T) {
 	p := testDirectoryProvider{bases: AppDirectories{Runtime: "/run", Config: "/etc", State: "/var/lib", Logs: "/var/log"}}
 	s := specification{name: "worker", scope: System, runtimeDir: strptr("socket"), configDir: strptr("settings"), stateDir: strptr("data"), logDir: strptr("journal")}
@@ -145,6 +176,73 @@ func TestTraversableDirectoryRejectsInaccessibleAncestor(t *testing.T) {
 	info := testDirInfo{mode: 0o700, stat: syscall.Stat_t{Uid: 1, Gid: 1}}
 	if err := traversableDirectory(info, 2, 2); err == nil {
 		t.Fatal("inaccessible ancestor accepted")
+	}
+}
+
+func TestUninstallRemovesOnlyManagedRuntimeDirectory(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := directoryTestBackend{testDirectoryProvider{bases: AppDirectories{Runtime: root, Config: root, State: root, Logs: root}}}
+	o := operation{spec: specification{name: "worker", scope: User, runtimeDir: strptr("run"), configDir: strptr("config"), stateDir: strptr("state"), logDir: strptr("log")}, user: host.UserInfo{Home: root}, backend: b, files: osFiles{}}
+	d, err := resolveDirectories(o.spec, b, o.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{d.Runtime, d.Config, d.State, d.Logs} {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(d.Runtime, "socket"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := o.uninstall(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(d.Runtime); !os.IsNotExist(err) {
+		t.Fatalf("runtime remains: %v", err)
+	}
+	for _, path := range []string{d.Config, d.State, d.Logs} {
+		if _, err := os.Lstat(path); err != nil {
+			t.Fatalf("persistent directory missing: %s: %v", path, err)
+		}
+	}
+}
+
+func TestPurgeRemovesOnlySelectedDeclaredDirectory(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := directoryTestBackend{testDirectoryProvider{bases: AppDirectories{Runtime: root, Config: root, State: root, Logs: root}}}
+	o := operation{spec: specification{name: "worker", scope: User, configDir: strptr("config"), stateDir: strptr("state"), logDir: strptr("log")}, user: host.UserInfo{Home: root}, backend: b, files: osFiles{}}
+	d, err := resolveDirectories(o.spec, b, o.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{d.Config, d.State, d.Logs} {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := o.purge(context.Background(), PurgeOptions{State: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(d.State); !os.IsNotExist(err) {
+		t.Fatalf("state remains: %v", err)
+	}
+	for _, path := range []string{d.Config, d.Logs} {
+		if _, err := os.Lstat(path); err != nil {
+			t.Fatalf("unselected directory missing: %s: %v", path, err)
+		}
+	}
+	if err := o.purge(context.Background(), PurgeOptions{Logs: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := o.purge(context.Background(), PurgeOptions{Config: true}); err == nil {
+		t.Fatal("config purge accepted without selecting nested state")
 	}
 }
 

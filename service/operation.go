@@ -182,6 +182,11 @@ func (o *operation) purge(c context.Context, options PurgeOptions) error {
 	if err != nil {
 		return err
 	}
+	// In user scope state and logs are children of the config root. Refuse a
+	// config-only purge rather than recursively deleting unselected data.
+	if o.spec.scope == User && options.Config && ((d.state && !options.State) || (d.logs && !options.Logs)) {
+		return &ValidationError{Message: "purging user config requires selecting its declared state and logs directories"}
+	}
 	for _, item := range []struct {
 		selected, declared bool
 		path               string

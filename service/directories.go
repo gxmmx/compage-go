@@ -146,12 +146,19 @@ func (o *operation) reconcileDirectories(d managedDirectories, uid, gid string) 
 		if o.spec.scope == System {
 			owner = 0
 		}
+		needed, err := directoryReconciliationNeeded(o.files, item.path, owner, group, mode)
+		if err != nil {
+			return changes, err
+		}
 		created, err := ensureManagedDirectory(o.files, item.path, owner, group, mode)
 		if err != nil {
 			return changes, err
 		}
-		if created {
-			changes = append(changes, DirectoryChange{Path: item.path, Created: true})
+		if err := verifyManagedDirectory(o.files, item.path, owner, group, mode); err != nil {
+			return changes, err
+		}
+		if created || needed {
+			changes = append(changes, DirectoryChange{Path: item.path, Created: created})
 		}
 	}
 	if d.logs {
@@ -174,6 +181,42 @@ func (o *operation) reconcileDirectories(d managedDirectories, uid, gid string) 
 		}
 	}
 	return changes, nil
+}
+
+func directoryReconciliationNeeded(f files, path string, uid, gid int, mode os.FileMode) (bool, error) {
+	info, err := f.lstat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, errx.New("service: inspecting managed directory "+path, errx.WithCause(err))
+	}
+	if info == nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return false, &ValidationError{Message: "managed directory must be a real directory: " + path}
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat == nil {
+		return false, errx.New("service: unsupported directory ownership metadata")
+	}
+	return info.Mode().Perm() != mode.Perm() || int(stat.Uid) != uid || int(stat.Gid) != gid, nil
+}
+
+func verifyManagedDirectory(f files, path string, uid, gid int, mode os.FileMode) error {
+	info, err := f.lstat(path)
+	if err != nil {
+		return errx.New("service: verifying managed directory "+path, errx.WithCause(err))
+	}
+	if info == nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return &ValidationError{Message: "managed directory has unexpected type: " + path}
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat == nil {
+		return errx.New("service: unsupported directory ownership metadata")
+	}
+	if info.Mode().Perm() != mode.Perm() || int(stat.Uid) != uid || int(stat.Gid) != gid {
+		return &ValidationError{Message: "managed directory has unexpected ownership or mode: " + path}
+	}
+	return nil
 }
 
 func resolvedLogPath(dir, name, fallback string) string {
@@ -295,8 +338,8 @@ func (o *operation) cleanupManaged(path string) error {
 		if err != nil {
 			return err
 		}
-		if info == nil || info.Mode()&os.ModeSymlink != 0 {
-			return &ValidationError{Message: "refusing to remove symlinked managed directory"}
+		if info == nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return &ValidationError{Message: "refusing to remove a symlinked or non-directory managed path"}
 		}
 	}
 	if err := o.files.removeAll(path); err != nil {

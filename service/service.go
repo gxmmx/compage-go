@@ -293,6 +293,41 @@ func (m *Manager) Stop(c context.Context) error                        { return 
 func (m *Manager) Uninstall(c context.Context) error                   { return m.op.uninstall(c) }
 func (m *Manager) Purge(c context.Context, options PurgeOptions) error { return m.op.purge(c, options) }
 func (m *Manager) Status(c context.Context) (Status, error)            { return m.op.status(c) }
+
+// Directories resolves the managed locations declared by opts without
+// changing the machine. It is safe for the unprivileged program to call.
+// name is required because directory defaults derive from the final service
+// name; opts may include the directory and scope options used by its manager.
+func Directories(name string, opts ...Option) (AppDirectories, error) {
+	s := specification{name: name, scope: User}
+	for _, opt := range opts {
+		if opt == nil {
+			return AppDirectories{}, &ValidationError{Message: "nil option"}
+		}
+		if err := opt(&s); err != nil {
+			return AppDirectories{}, err
+		}
+	}
+	if !validServiceName(s.name) {
+		return AppDirectories{}, &ValidationError{Message: "invalid service name"}
+	}
+	b, err := platformBackend(host.Platform().OS)
+	if err != nil {
+		return AppDirectories{}, err
+	}
+	if err := b.validate(s); err != nil {
+		return AppDirectories{}, err
+	}
+	u, err := host.User()
+	if err != nil {
+		return AppDirectories{}, err
+	}
+	d, err := resolveDirectories(s, b, u)
+	if err != nil {
+		return AppDirectories{}, err
+	}
+	return d.AppDirectories, nil
+}
 func validate(s specification) error {
 	if s.scope != User && s.scope != System {
 		return &ValidationError{Message: "unknown scope"}
