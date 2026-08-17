@@ -222,3 +222,11 @@ func TestLinuxEnsureRechecksExactSupplementaryGroups(t *testing.T) {
 		t.Fatalf("Ensure() = %#v, %v", got, err)
 	}
 }
+
+func TestLinuxHiddenPolicyIsNoOp(t *testing.T) {
+	t.Parallel()
+	hidden := true
+	if changes := compareFor(host.Linux, Spec{Hidden: &hidden}, Record{}); len(changes) != 0 {
+		t.Fatalf("changes = %#v", changes)
+	}
+}

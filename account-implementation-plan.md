@@ -16,28 +16,17 @@ existing account beyond the explicit policy supplied by the caller.
 
 ## Implementation status
 
-The package has its public API, `Check`/`Ensure` planning flow, typed `errx`
-errors, cancellation handling, and a fakeable architecture in place. Account
-store, command-runner, and filesystem adapters are injected, so unit tests do
-not create, modify, or delete real accounts, groups, home directories, or other
-account-owned filesystem objects. Current tests cover core planning, drift,
-privilege, cancellation, command rendering, command failures, and primary-group
-GID drift. Repository verification passes through `task check`.
+The package has separate Linux and macOS backends, typed `errx` errors,
+privilege and capability preflight, cancellation handling, and injected account
+store, command-runner, and filesystem adapters. The backend acceptance matrix
+below is covered by fake-backed tests: parsing, creation and relookup,
+group/GID reconciliation, exact supplementary memberships, home mode and
+ownership, command/filesystem failures, cancellation, and partial results.
 
-This is not yet a declaration that the package is safe for real account
-mutation. The following work remains before that claim is justified:
-
-- split the current conditional implementation into fully specified Linux and
-  macOS backends;
-- add fake-backed tests for lookup parsing, group creation/reconciliation, home
-  filesystem failures, partial mutations, and exact supplementary-group
-  reconciliation;
-- validate Linux tool capabilities rather than assuming `useradd`/`usermod`
-  flags are portable;
-- implement safe macOS UID allocation and complete directory-service semantics;
-- verify every postcondition, including home ownership/mode and group membership.
-
-Until these items are complete, do not use `Ensure` against a real host.
+Tests never create, modify, or delete real accounts, groups, home directories,
+or account-owned filesystem objects. `task check` passes with this fake-only
+verification strategy. `Ensure` is non-transactional by design; callers must
+handle its completed-change result if a later mutation fails.
 
 ## Public API
 

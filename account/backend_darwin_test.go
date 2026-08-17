@@ -33,6 +33,15 @@ func TestDarwinLookupParsesDirectoryServiceAttributes(t *testing.T) {
 	}
 }
 
+func TestDarwinLookupReadsHiddenAttribute(t *testing.T) {
+	t.Parallel()
+	b := darwinBackend{backendDeps: backendDeps{store: lookupStore(), runner: outputRunner{value: "NFSHomeDirectory: /srv/worker\nUserShell: /usr/bin/false\nIsHidden: 1\n"}}}
+	got, err := b.lookup(context.Background(), "worker", false)
+	if err != nil || !got.Hidden {
+		t.Fatalf("lookup() = %#v, %v", got, err)
+	}
+}
+
 func TestDarwinLookupRejectsMissingDirectoryServiceAttribute(t *testing.T) {
 	t.Parallel()
 	b := darwinBackend{backendDeps: backendDeps{store: lookupStore(), runner: outputRunner{value: "NFSHomeDirectory: /srv/worker\n"}}}
@@ -177,7 +186,7 @@ func TestDarwinModifyReconcilesSupplementaryGroupsExactly(t *testing.T) {
 		t.Fatalf("commands = %#v", runner.calls)
 	}
 }
-func TestDarwinModifyDoesNotChangeCreationOnlyKind(t *testing.T) {
+func TestDarwinModifyDoesNotChangeUnmanagedHiddenState(t *testing.T) {
 	t.Parallel()
 	runner := &recordingRunner{}
 	b := darwinBackend{backendDeps: backendDeps{runner: runner}}
@@ -185,6 +194,20 @@ func TestDarwinModifyDoesNotChangeCreationOnlyKind(t *testing.T) {
 		t.Fatalf("modify() error = %v", err)
 	}
 	want := []string{"dscl", ".", "-create", "/Users/worker", "UserShell", "/bin/zsh"}
+	if len(runner.calls) != 1 || !sameCommand(runner.calls[0], want) {
+		t.Fatalf("commands = %#v", runner.calls)
+	}
+}
+
+func TestDarwinModifySetsExplicitHiddenState(t *testing.T) {
+	t.Parallel()
+	runner := &recordingRunner{}
+	b := darwinBackend{backendDeps: backendDeps{runner: runner}}
+	hidden := false
+	if err := b.modify(context.Background(), Spec{Name: "worker", Hidden: &hidden}, Record{Name: "worker"}); err != nil {
+		t.Fatalf("modify() error = %v", err)
+	}
+	want := []string{"dscl", ".", "-create", "/Users/worker", "IsHidden", "0"}
 	if len(runner.calls) != 1 || !sameCommand(runner.calls[0], want) {
 		t.Fatalf("commands = %#v", runner.calls)
 	}
