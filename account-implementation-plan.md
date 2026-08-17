@@ -14,6 +14,31 @@ when the effective process identity lacks the necessary authority.
 The package never elevates privileges, invokes `sudo`, or silently changes an
 existing account beyond the explicit policy supplied by the caller.
 
+## Implementation status
+
+The package has its public API, `Check`/`Ensure` planning flow, typed `errx`
+errors, cancellation handling, and a fakeable architecture in place. Account
+store, command-runner, and filesystem adapters are injected, so unit tests do
+not create, modify, or delete real accounts, groups, home directories, or other
+account-owned filesystem objects. Current tests cover core planning, drift,
+privilege, cancellation, command rendering, command failures, and primary-group
+GID drift. Repository verification passes through `task check`.
+
+This is not yet a declaration that the package is safe for real account
+mutation. The following work remains before that claim is justified:
+
+- split the current conditional implementation into fully specified Linux and
+  macOS backends;
+- add fake-backed tests for lookup parsing, group creation/reconciliation, home
+  filesystem failures, partial mutations, and exact supplementary-group
+  reconciliation;
+- validate Linux tool capabilities rather than assuming `useradd`/`usermod`
+  flags are portable;
+- implement safe macOS UID allocation and complete directory-service semantics;
+- verify every postcondition, including home ownership/mode and group membership.
+
+Until these items are complete, do not use `Ensure` against a real host.
+
 ## Public API
 
 ```go
@@ -46,6 +71,7 @@ type Record struct {
 
 func Lookup(context.Context, name string) (Record, error)
 func LookupID(context.Context, uid string) (Record, error)
+func Check(context.Context, Spec) (EnsureResult, error)
 
 type Kind uint8
 
@@ -92,9 +118,37 @@ type EnsureResult struct {
 func Ensure(context.Context, Spec) (EnsureResult, error)
 ```
 
-`Lookup` is read-only. `Ensure` creates a missing account or evaluates an
-existing one against its explicit specification. Applying an unchanged
-specification again performs no mutation.
+`Lookup` and `Check` are read-only. `Check` evaluates precisely what `Ensure`
+would do, including specification validation, account/group/home inspection,
+policy comparison, and capability/privilege preflight, but never invokes a
+mutation backend. Its result is a plan: `Created` means the account would be
+created, `Changed` contains the exact changes that would be applied, and
+`Account` is the observed account when present (or its zero value when absent).
+No `DryRun` option or result field is needed because the method itself makes
+the no-mutation guarantee explicit.
+
+`Ensure` creates a missing account or evaluates an existing one against its
+explicit specification. Applying an unchanged specification again performs no
+mutation. With `Existing: Verify`, both `Check` and `Ensure` return the same
+typed `DriftError` when a present account does not meet the specification.
+
+## Context, cancellation, and partial application
+
+Every operation accepts a caller-owned context. `Check` and `Ensure` must
+return promptly when `ctx` is already cancelled and must check `ctx.Err()`
+before each backend operation. Command-backed backends use the same context for
+their child process so a parent cancellation or deadline can stop it where the
+operating system permits. The package never creates, replaces, or cancels a
+caller context; applications own deadline policy through a derived context.
+
+Account reconciliation is not transactional. Cancellation or failure can occur
+after an account, group, supplementary-group membership, or home directory has
+already changed. `Ensure` must not begin a later mutation after cancellation,
+must preserve `context.Canceled` or `context.DeadlineExceeded` in its returned
+error, and returns an `EnsureResult` containing changes completed before the
+failure. It must not attempt automatic rollback: rollback may be destructive or
+incorrect under concurrent host policy. A later `Ensure` is the explicit,
+idempotent recovery mechanism.
 
 ## Account policy
 
@@ -213,8 +267,8 @@ All errors wrap their underlying cause so callers can use `errors.Is` and
 ## Test strategy
 
 - Unit-test specification validation, policy comparison, path validation,
-  privilege preflight, typed-error classification, and result generation without
-  touching host accounts.
+  privilege preflight, typed-error classification, `Check` planning, and result
+  generation without touching host accounts.
 - Use injected account-store, command-runner, filesystem, and host-query seams
   for every lookup and backend-mutation test.
 - The repository test suite must never create, modify, or delete a real account,
