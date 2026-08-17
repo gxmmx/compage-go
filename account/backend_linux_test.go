@@ -17,11 +17,11 @@ func TestLinuxCreateRendersDeclaredSpec(t *testing.T) {
 	runner := &recordingRunner{}
 	b := linuxBackend{backendDeps: backendDeps{runner: runner}}
 	uid := 42
-	err := b.create(context.Background(), Spec{Name: "worker", Kind: System, UID: &uid, Group: "worker", Home: "/var/lib/worker", HomePolicy: EnsureHome, Shell: NoLoginShell, Groups: []string{"logs", "metrics"}})
+	err := b.create(context.Background(), Spec{Name: "worker", UID: &uid, Group: "worker", Home: "/var/lib/worker", HomePolicy: EnsureHome, Shell: NoLoginShell, Groups: []string{"logs", "metrics"}})
 	if err != nil {
 		t.Fatalf("create() error = %v", err)
 	}
-	want := []string{"useradd", "--system", "--uid", "42", "--gid", "worker", "--home-dir", "/var/lib/worker", "--create-home", "--shell", NoLoginShell, "--groups", "logs,metrics", "worker"}
+	want := []string{"useradd", "--uid", "42", "--gid", "worker", "--home-dir", "/var/lib/worker", "--create-home", "--shell", NoLoginShell, "--groups", "logs,metrics", "worker"}
 	if !sameCommand(runner.calls[0], want) {
 		t.Errorf("command = %#v, want %#v", runner.calls[0], want)
 	}
@@ -30,7 +30,7 @@ func TestLinuxCreateDisablesImplicitHomeCreation(t *testing.T) {
 	t.Parallel()
 	runner := &recordingRunner{}
 	b := linuxBackend{backendDeps: backendDeps{runner: runner}}
-	if err := b.create(context.Background(), Spec{Name: "worker", Kind: Regular, Group: "worker"}); err != nil {
+	if err := b.create(context.Background(), Spec{Name: "worker", Group: "worker"}); err != nil {
 		t.Fatalf("create() error = %v", err)
 	}
 	if !sameCommand(runner.calls[0], []string{"useradd", "--gid", "worker", "--no-create-home", "worker"}) {
@@ -65,7 +65,7 @@ func TestLinuxApplyCreatesAndVerifiesPrimaryGroup(t *testing.T) {
 		}
 	}}
 	b := linuxBackend{backendDeps: backendDeps{store: store, runner: runner}}
-	completed, err := b.apply(context.Background(), Spec{Name: "worker", Kind: Regular, Group: "worker", Existing: Reconcile}, nil)
+	completed, err := b.apply(context.Background(), Spec{Name: "worker", Group: "worker", Existing: Reconcile}, nil)
 	if err != nil {
 		t.Fatalf("apply() error = %v", err)
 	}
@@ -95,7 +95,7 @@ func TestLinuxApplyKeepsCompletedGroupAfterAccountFailure(t *testing.T) {
 		return nil
 	}}
 	b := linuxBackend{backendDeps: backendDeps{store: store, runner: runner}}
-	completed, err := b.apply(context.Background(), Spec{Name: "worker", Kind: Regular, Group: "worker", Existing: Reconcile}, nil)
+	completed, err := b.apply(context.Background(), Spec{Name: "worker", Group: "worker", Existing: Reconcile}, nil)
 	if !errors.Is(err, cause) || len(completed) != 1 || completed[0].Field != "group record" {
 		t.Fatalf("apply() = %#v, %v", completed, err)
 	}
@@ -144,7 +144,7 @@ func TestLinuxReconcilesAndVerifiesExistingGroupGID(t *testing.T) {
 func TestLinuxRejectsUnavailableCommandCapability(t *testing.T) {
 	t.Parallel()
 	b := linuxBackend{backendDeps: backendDeps{runner: &recordingRunner{}}}
-	_, err := b.apply(context.Background(), Spec{Name: "worker", Kind: System, Existing: Reconcile}, nil)
+	_, err := b.apply(context.Background(), Spec{Name: "worker", Existing: Reconcile}, nil)
 	var unsupported *UnsupportedError
 	if !errors.As(err, &unsupported) {
 		t.Fatalf("apply() error = %v", err)
@@ -156,7 +156,7 @@ func TestLinuxPreflightChecksRequiredCommandsWithoutMutation(t *testing.T) {
 	runner := &scriptRunner{}
 	b := linuxBackend{backendDeps: backendDeps{runner: runner}}
 	uid, gid := 101, 201
-	spec := Spec{Name: "worker", Kind: System, UID: &uid, Group: "worker", GID: &gid, Groups: []string{"logs"}, Home: "/srv/worker", HomePolicy: EnsureHome, Shell: NoLoginShell}
+	spec := Spec{Name: "worker", UID: &uid, Group: "worker", GID: &gid, Groups: []string{"logs"}, Home: "/srv/worker", HomePolicy: EnsureHome, Shell: NoLoginShell}
 	if err := b.preflight(context.Background(), spec, false); err != nil {
 		t.Fatalf("preflight() error = %v", err)
 	}
@@ -193,7 +193,7 @@ func TestLinuxEnsureCreatesThenRechecksObservedRecord(t *testing.T) {
 	b := linuxBackend{backendDeps: backendDeps{store: store, runner: runner}}
 	op := operation{deps: dependencies{platform: host.PlatformInfo{OS: host.Linux}, root: true, backend: b}}
 	uid := 101
-	got, err := op.run(context.Background(), Spec{Name: "worker", Kind: Regular, UID: &uid, Group: "worker", Shell: "/usr/sbin/nologin", Groups: []string{}}, true)
+	got, err := op.run(context.Background(), Spec{Name: "worker", UID: &uid, Group: "worker", Shell: "/usr/sbin/nologin", Groups: []string{}}, true)
 	if err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}

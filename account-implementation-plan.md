@@ -73,13 +73,6 @@ func Lookup(context.Context, name string) (Record, error)
 func LookupID(context.Context, uid string) (Record, error)
 func Check(context.Context, Spec) (EnsureResult, error)
 
-type Kind uint8
-
-const (
-    System Kind = iota
-    Regular
-)
-
 type HomePolicy uint8
 
 const (
@@ -97,7 +90,6 @@ const (
 
 type Spec struct {
     Name       string
-    Kind       Kind
     UID        *int
     Group      string
     GID        *int
@@ -106,6 +98,7 @@ type Spec struct {
     HomePolicy HomePolicy
     HomeMode   fs.FileMode
     Shell      string
+    Hidden     *bool
     Existing   ExistingPolicy
 }
 
@@ -155,12 +148,12 @@ idempotent recovery mechanism.
 Account creation cannot safely have one implicit default. The specification
 requires callers to choose the parts that change host policy:
 
-- system/service account or regular login account;
 - primary group and optional supplementary groups;
 - explicit or automatically allocated UID/GID;
 - home path and whether it must exist;
 - home mode;
 - shell, including an explicit no-login value;
+- macOS user-picker visibility when explicitly managed;
 - whether an existing account is only verified or may be reconciled.
 
 Examples supported by this model include:
@@ -180,6 +173,13 @@ reports every change.
 
 Never infer an account's desired home, shell, UID, groups, or login access from
 its name.
+
+`account` does not model a portable system-versus-regular account kind. Those
+semantics are operating-system-specific and are expressed explicitly through
+the caller's UID, GID, shell, home, and group choices. `Hidden` is an optional
+macOS-specific policy: `nil` leaves visibility unmanaged, `true` hides the
+local account from the user picker, and `false` makes it visible. Linux treats
+`Hidden` as a no-op and never reports drift for it.
 
 ## Home directories
 

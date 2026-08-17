@@ -166,9 +166,6 @@ func (b linuxBackend) ensureGroup(ctx context.Context, s Spec) (bool, error) {
 
 func (b linuxBackend) create(ctx context.Context, s Spec) error {
 	args := []string{}
-	if s.Kind == System {
-		args = append(args, "--system")
-	}
 	if s.UID != nil {
 		args = append(args, "--uid", strconv.Itoa(*s.UID))
 	}
@@ -238,12 +235,9 @@ func (b linuxBackend) ensureHome(ctx context.Context, s Spec) error {
 }
 
 func (b linuxBackend) checkCapabilities(ctx context.Context, s Spec, modifying bool) error {
-	command, needed := "useradd", []string{"--system", "--uid", "--gid", "--home-dir", "--shell", "--groups", "--no-create-home"}
+	command, needed := "useradd", []string{"--uid", "--gid", "--home-dir", "--shell", "--groups", "--no-create-home"}
 	if modifying {
 		command, needed = "usermod", []string{"--uid", "--gid", "--home", "--shell", "--groups"}
-	}
-	if s.Kind != System {
-		needed = without(needed, "--system")
 	}
 	if s.UID == nil {
 		needed = without(needed, "--uid")

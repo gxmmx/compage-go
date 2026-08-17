@@ -62,6 +62,9 @@ func (o operation) run(ctx context.Context, spec Spec, apply bool) (EnsureResult
 			return EnsureResult{}, err
 		}
 		result := EnsureResult{Created: true, Changed: creationChanges(spec)}
+		if o.deps.platform.OS == host.Darwin && spec.Hidden != nil {
+			result.Changed = append(result.Changed, Change{Field: "hidden", Before: "absent", After: strconv.FormatBool(*spec.Hidden)})
+		}
 		if !o.deps.root {
 			return result, &PrivilegeError{Capability: "create local account"}
 		}
@@ -81,7 +84,7 @@ func (o operation) run(ctx context.Context, spec Spec, apply bool) (EnsureResult
 			return result, err
 		}
 		result.Account = created
-		if remaining := compare(spec, created); len(remaining) > 0 {
+		if remaining := compareFor(o.deps.platform.OS, spec, created); len(remaining) > 0 {
 			return result, &DriftError{Changes: remaining}
 		}
 		if spec.HomePolicy != LeaveHomeUnchanged {
@@ -95,7 +98,7 @@ func (o operation) run(ctx context.Context, spec Spec, apply bool) (EnsureResult
 		}
 		return result, nil
 	}
-	changes := compare(spec, record)
+	changes := compareFor(o.deps.platform.OS, spec, record)
 	if err := o.deps.backend.preflight(ctx, spec, true); err != nil {
 		return EnsureResult{}, err
 	}
@@ -134,7 +137,7 @@ func (o operation) run(ctx context.Context, spec Spec, apply bool) (EnsureResult
 		return result, err
 	}
 	result.Account = updated
-	if remaining := compare(spec, updated); len(remaining) > 0 {
+	if remaining := compareFor(o.deps.platform.OS, spec, updated); len(remaining) > 0 {
 		return result, &DriftError{Changes: remaining}
 	}
 	if spec.HomePolicy == EnsureHome {
@@ -174,9 +177,6 @@ func creationChanges(s Spec) []Change {
 func validate(s Spec) error {
 	if !validLocalName(s.Name) {
 		return &ValidationError{Message: "name must be a simple local account name"}
-	}
-	if s.Kind != System && s.Kind != Regular {
-		return &ValidationError{Message: "unknown account kind"}
 	}
 	if s.Existing != Verify && s.Existing != Reconcile {
 		return &ValidationError{Message: "unknown existing policy"}
@@ -241,6 +241,13 @@ func compare(s Spec, r Record) []Change {
 		out = append(out, Change{"groups", strings.Join(r.Groups, ","), strings.Join(s.Groups, ",")})
 	}
 	return out
+}
+func compareFor(platform host.OS, s Spec, r Record) []Change {
+	changes := compare(s, r)
+	if platform == host.Darwin && s.Hidden != nil && r.Hidden != *s.Hidden {
+		changes = append(changes, Change{Field: "hidden", Before: strconv.FormatBool(r.Hidden), After: strconv.FormatBool(*s.Hidden)})
+	}
+	return changes
 }
 func sameStrings(a, b []string) bool {
 	a = append([]string(nil), a...)

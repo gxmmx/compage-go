@@ -49,7 +49,7 @@ func (b darwinBackend) lookup(ctx context.Context, key string, byID bool) (Recor
 		}
 		groups = append(groups, group.Name)
 	}
-	out, err := commandOutput(ctx, b.runner, "dscl", ".", "-read", "/Users/"+u.Username, "NFSHomeDirectory", "UserShell")
+	out, err := commandOutput(ctx, b.runner, "dscl", ".", "-read", "/Users/"+u.Username, "NFSHomeDirectory", "UserShell", "IsHidden")
 	if err != nil {
 		return Record{}, err
 	}
@@ -63,7 +63,7 @@ func (b darwinBackend) lookup(ctx context.Context, key string, byID bool) (Recor
 	if values["NFSHomeDirectory"] == "" || values["UserShell"] == "" {
 		return Record{}, errx.New("account: malformed Directory Service record for " + u.Username)
 	}
-	return Record{Name: u.Username, UID: u.Uid, GID: u.Gid, Group: primary.Name, Home: values["NFSHomeDirectory"], Shell: values["UserShell"], Groups: groups}, nil
+	return Record{Name: u.Username, UID: u.Uid, GID: u.Gid, Group: primary.Name, Home: values["NFSHomeDirectory"], Shell: values["UserShell"], Groups: groups, Hidden: values["IsHidden"] == "1" || values["IsHidden"] == "true"}, nil
 }
 
 func (b darwinBackend) homeExists(ctx context.Context, path string) (bool, error) {
@@ -182,13 +182,6 @@ func (b darwinBackend) create(ctx context.Context, s Spec) error {
 	if err := runCommand(ctx, b.runner, "dscl", ".", "-create", "/Users/"+s.Name); err != nil {
 		return err
 	}
-	hidden := "0"
-	if s.Kind == System {
-		hidden = "1"
-	}
-	if err := runCommand(ctx, b.runner, "dscl", ".", "-create", "/Users/"+s.Name, "IsHidden", hidden); err != nil {
-		return err
-	}
 	if err := b.setAttributes(ctx, s); err != nil {
 		return err
 	}
@@ -227,6 +220,15 @@ func (b darwinBackend) modify(ctx context.Context, s Spec, existing Record) erro
 }
 
 func (b darwinBackend) setAttributes(ctx context.Context, s Spec) error {
+	if s.Hidden != nil {
+		hidden := "0"
+		if *s.Hidden {
+			hidden = "1"
+		}
+		if err := runCommand(ctx, b.runner, "dscl", ".", "-create", "/Users/"+s.Name, "IsHidden", hidden); err != nil {
+			return err
+		}
+	}
 	if s.UID != nil {
 		if err := runCommand(ctx, b.runner, "dscl", ".", "-create", "/Users/"+s.Name, "UniqueID", strconv.Itoa(*s.UID)); err != nil {
 			return err

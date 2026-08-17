@@ -9,14 +9,8 @@ import (
 type Record struct {
 	Name, UID, GID, Group, Home, Shell string
 	Groups                             []string
+	Hidden                             bool
 }
-
-type Kind uint8
-
-const (
-	System Kind = iota
-	Regular
-)
 
 // NoLoginShell is the Linux no-login shell. Callers targeting macOS should
 // provide its platform-appropriate no-login shell explicitly.
@@ -39,12 +33,9 @@ const (
 	Reconcile
 )
 
-// Spec declares the account policy managed by Ensure. Kind controls account
-// creation only: Unix does not expose a portable, stable system-account marker
-// for an existing record, so Ensure never changes an existing account's kind.
+// Spec declares the account policy managed by Ensure.
 type Spec struct {
 	Name       string
-	Kind       Kind
 	UID        *int
 	Group      string
 	GID        *int
@@ -53,6 +44,7 @@ type Spec struct {
 	HomePolicy HomePolicy
 	HomeMode   fs.FileMode
 	Shell      string
+	Hidden     *bool
 	Existing   ExistingPolicy
 }
 

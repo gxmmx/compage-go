@@ -80,7 +80,8 @@ func TestDarwinCreateRendersDeclaredAttributesInOrder(t *testing.T) {
 	runner := &recordingRunner{}
 	b := darwinBackend{backendDeps: backendDeps{store: store, runner: runner}}
 	uid := 101
-	spec := Spec{Name: "worker", Kind: System, UID: &uid, Group: "worker", Home: "/srv/worker", HomePolicy: EnsureHome, Shell: "/usr/bin/false", Groups: []string{"logs"}}
+	hidden := true
+	spec := Spec{Name: "worker", UID: &uid, Group: "worker", Home: "/srv/worker", HomePolicy: EnsureHome, Shell: "/usr/bin/false", Hidden: &hidden, Groups: []string{"logs"}}
 	if err := b.create(context.Background(), spec); err != nil {
 		t.Fatalf("create() error = %v", err)
 	}
@@ -114,7 +115,7 @@ func TestDarwinEnsureCreatesThenRechecksObservedRecord(t *testing.T) {
 	b := darwinBackend{backendDeps: backendDeps{store: store, runner: runner}}
 	op := operation{deps: dependencies{platform: host.PlatformInfo{OS: host.Darwin}, root: true, backend: b}}
 	uid := 101
-	got, err := op.run(context.Background(), Spec{Name: "worker", Kind: Regular, UID: &uid, Group: "worker", Shell: "/usr/bin/false", Groups: []string{}}, true)
+	got, err := op.run(context.Background(), Spec{Name: "worker", UID: &uid, Group: "worker", Shell: "/usr/bin/false", Groups: []string{}}, true)
 	if err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}
