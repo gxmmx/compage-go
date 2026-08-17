@@ -3,12 +3,13 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/gxmmx/compage-go/errx"
 )
 
 const minimumSystemdVersion = 260
@@ -38,23 +39,26 @@ func (b systemdBackend) ensure(c context.Context, o *operation) (EnsureResult, e
 		return EnsureResult{}, err
 	}
 	p := systemdPath(o)
+	if err := rejectSymlink(o.files, p); err != nil {
+		return EnsureResult{}, err
+	}
 	if o.spec.scope == User {
 		if err := o.files.mkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return EnsureResult{}, err
 		}
 	}
 	want := []byte(renderSystemd(o))
-	old, e := o.files.read(p)
+	old, e := readDefinition(o.files, p)
 	changed := e != nil || string(old) != string(want)
 	if e != nil && !errors.Is(e, fs.ErrNotExist) {
 		return EnsureResult{}, e
 	}
 	if changed {
-		if e = o.files.write(p, want, 0644); e != nil {
+		if e = writeDefinition(o.files, p, want, 0644); e != nil {
 			return EnsureResult{}, e
 		}
-		if _, e = o.runner.run(c, "systemctl", systemdArgs(o, "daemon-reload")...); e != nil {
-			return EnsureResult{}, fmt.Errorf("systemctl daemon-reload: %w", e)
+		if _, e = commandOutput(c, o.runner, "systemctl", systemdArgs(o, "daemon-reload")...); e != nil {
+			return EnsureResult{}, e
 		}
 	}
 	return EnsureResult{Installed: true, Changed: changed, Reasons: reason(changed)}, nil
@@ -63,14 +67,14 @@ func (systemdBackend) start(c context.Context, o *operation) error {
 	if err := checkSystemdVersion(c, o); err != nil {
 		return err
 	}
-	_, e := o.runner.run(c, "systemctl", systemdArgs(o, "enable", "--now", o.spec.name+".service")...)
+	_, e := commandOutput(c, o.runner, "systemctl", systemdArgs(o, "enable", "--now", o.spec.name+".service")...)
 	return e
 }
 func (systemdBackend) stop(c context.Context, o *operation) error {
 	if err := checkSystemdVersion(c, o); err != nil {
 		return err
 	}
-	_, e := o.runner.run(c, "systemctl", systemdArgs(o, "disable", "--now", o.spec.name+".service")...)
+	_, e := commandOutput(c, o.runner, "systemctl", systemdArgs(o, "disable", "--now", o.spec.name+".service")...)
 	return e
 }
 func (b systemdBackend) uninstall(c context.Context, o *operation) error {
@@ -78,11 +82,15 @@ func (b systemdBackend) uninstall(c context.Context, o *operation) error {
 		return err
 	}
 	_ = b.stop(c, o)
-	e := o.files.remove(systemdPath(o))
+	p := systemdPath(o)
+	if err := rejectSymlink(o.files, p); err != nil {
+		return err
+	}
+	e := removeDefinition(o.files, p)
 	if e != nil && !errors.Is(e, fs.ErrNotExist) {
 		return e
 	}
-	_, e = o.runner.run(c, "systemctl", systemdArgs(o, "daemon-reload")...)
+	_, e = commandOutput(c, o.runner, "systemctl", systemdArgs(o, "daemon-reload")...)
 	return e
 }
 func (systemdBackend) status(c context.Context, o *operation) (Status, error) {
@@ -111,7 +119,7 @@ func (systemdBackend) status(c context.Context, o *operation) (Status, error) {
 func checkSystemdVersion(c context.Context, o *operation) error {
 	out, err := o.runner.run(c, "systemctl", "--version")
 	if err != nil {
-		return &UnsupportedError{Capability: "systemctl", Cause: err}
+		return &UnsupportedError{Capability: "systemctl", Cause: errx.New("service: inspecting systemd", errx.WithCause(err))}
 	}
 	fields := strings.Fields(out)
 	if len(fields) < 2 || fields[0] != "systemd" {

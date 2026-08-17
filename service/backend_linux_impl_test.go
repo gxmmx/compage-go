@@ -2,11 +2,11 @@ package service
 
 import (
 	"context"
-	"errors"
 	"io/fs"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gxmmx/compage-go/host"
 )
@@ -32,6 +32,21 @@ func (f *fakeFiles) stat(p string) (os.FileInfo, error) {
 	}
 	return nil, nil
 }
+func (f *fakeFiles) lstat(p string) (os.FileInfo, error) {
+	if _, ok := f.values[p]; !ok {
+		return nil, fs.ErrNotExist
+	}
+	return fakeInfo{}, nil
+}
+
+type fakeInfo struct{}
+
+func (fakeInfo) Name() string       { return "service" }
+func (fakeInfo) Size() int64        { return 0 }
+func (fakeInfo) Mode() os.FileMode  { return 0o644 }
+func (fakeInfo) ModTime() time.Time { return time.Time{} }
+func (fakeInfo) IsDir() bool        { return false }
+func (fakeInfo) Sys() any           { return nil }
 
 type fakeRunner struct {
 	calls   [][]string
@@ -91,5 +106,3 @@ func TestSystemdRejectsOldVersion(t *testing.T) {
 		t.Fatal("old systemd accepted")
 	}
 }
-
-var _ = errors.New

@@ -32,19 +32,22 @@ func domain(o *operation) string {
 }
 func (b launchdBackend) ensure(c context.Context, o *operation) (EnsureResult, error) {
 	p := launchdPath(o)
+	if err := rejectSymlink(o.files, p); err != nil {
+		return EnsureResult{}, err
+	}
 	if o.spec.scope == User {
 		if err := o.files.mkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return EnsureResult{}, err
 		}
 	}
 	w := []byte(plist(o))
-	old, e := o.files.read(p)
+	old, e := readDefinition(o.files, p)
 	changed := e != nil || string(old) != string(w)
 	if e != nil && !errors.Is(e, fs.ErrNotExist) {
 		return EnsureResult{}, e
 	}
 	if changed {
-		if e = o.files.write(p, w, 0644); e != nil {
+		if e = writeDefinition(o.files, p, w, 0644); e != nil {
 			return EnsureResult{}, e
 		}
 	}
@@ -57,23 +60,31 @@ func (b launchdBackend) ensure(c context.Context, o *operation) (EnsureResult, e
 }
 func (launchdBackend) start(c context.Context, o *operation) error {
 	d := domain(o)
-	_, _ = o.runner.run(c, "launchctl", "enable", d+"/"+o.spec.name)
+	if _, err := commandOutput(c, o.runner, "launchctl", "enable", d+"/"+o.spec.name); err != nil {
+		return err
+	}
 	_, _ = o.runner.run(c, "launchctl", "bootout", d+"/"+o.spec.name)
-	if _, e := o.runner.run(c, "launchctl", "bootstrap", d, launchdPath(o)); e != nil {
+	if _, e := commandOutput(c, o.runner, "launchctl", "bootstrap", d, launchdPath(o)); e != nil {
 		return e
 	}
-	_, e := o.runner.run(c, "launchctl", "kickstart", "-k", d+"/"+o.spec.name)
+	_, e := commandOutput(c, o.runner, "launchctl", "kickstart", "-k", d+"/"+o.spec.name)
 	return e
 }
 func (launchdBackend) stop(c context.Context, o *operation) error {
 	d := domain(o)
-	_, _ = o.runner.run(c, "launchctl", "disable", d+"/"+o.spec.name)
-	_, e := o.runner.run(c, "launchctl", "bootout", d+"/"+o.spec.name)
+	if _, err := commandOutput(c, o.runner, "launchctl", "disable", d+"/"+o.spec.name); err != nil {
+		return err
+	}
+	_, e := commandOutput(c, o.runner, "launchctl", "bootout", d+"/"+o.spec.name)
 	return e
 }
 func (b launchdBackend) uninstall(c context.Context, o *operation) error {
 	_ = b.stop(c, o)
-	e := o.files.remove(launchdPath(o))
+	p := launchdPath(o)
+	if err := rejectSymlink(o.files, p); err != nil {
+		return err
+	}
+	e := removeDefinition(o.files, p)
 	if e != nil && !errors.Is(e, fs.ErrNotExist) {
 		return e
 	}

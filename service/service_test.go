@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"github.com/gxmmx/compage-go/account"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -15,6 +17,21 @@ func TestValidateRejectsUnsafeNamesAndEnvironment(t *testing.T) {
 	}
 	if err := validate(specification{name: "x", binary: "/bin/x", scope: User, env: map[string]string{"A-B": "x"}}); err == nil {
 		t.Fatal("invalid environment accepted")
+	}
+}
+
+func TestRejectSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	link := filepath.Join(dir, "service")
+	if err := os.WriteFile(target, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := rejectSymlink(osFiles{}, link); err == nil {
+		t.Fatal("symlink accepted")
 	}
 }
 

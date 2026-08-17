@@ -2,11 +2,16 @@ package service
 
 import (
 	"context"
+	"errors"
 	"github.com/gxmmx/compage-go/account"
 	"github.com/gxmmx/compage-go/host"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+
+	"github.com/gxmmx/compage-go/errx"
 )
 
 type runner interface {
@@ -25,6 +30,7 @@ type files interface {
 	mkdirAll(string, os.FileMode) error
 	remove(string) error
 	stat(string) (os.FileInfo, error)
+	lstat(string) (os.FileInfo, error)
 }
 type osFiles struct{}
 
@@ -61,6 +67,62 @@ func (osFiles) write(p string, b []byte, m os.FileMode) error {
 func (osFiles) mkdirAll(p string, m os.FileMode) error { return os.MkdirAll(p, m) }
 func (osFiles) remove(p string) error                  { return os.Remove(p) }
 func (osFiles) stat(p string) (os.FileInfo, error)     { return os.Stat(p) }
+func (osFiles) lstat(p string) (os.FileInfo, error)    { return os.Lstat(p) }
+
+func rejectSymlink(files files, path string) error {
+	info, err := files.lstat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info == nil {
+		return errx.New("service: inspecting definition path: empty file information")
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return &ValidationError{Message: "service definition path must not be a symlink"}
+	}
+	return nil
+}
+
+func commandOutput(ctx context.Context, r runner, name string, args ...string) (string, error) {
+	out, err := r.run(ctx, name, args...)
+	if err == nil {
+		return out, nil
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return "", errx.New("service: command cancelled: "+name, errx.WithCause(errors.Join(ctxErr, err)))
+	}
+	message := "service: command failed: " + name
+	if len(args) > 0 {
+		message += " " + strings.Join(args, " ")
+	}
+	if detail := strings.TrimSpace(out); detail != "" {
+		message += ": " + detail
+	}
+	return "", errx.New(message, errx.WithCause(err))
+}
+
+func readDefinition(files files, path string) ([]byte, error) {
+	data, err := files.read(path)
+	if err != nil {
+		return nil, errx.New("service: reading definition "+path, errx.WithCause(err))
+	}
+	return data, nil
+}
+func writeDefinition(files files, path string, data []byte, mode os.FileMode) error {
+	if err := files.write(path, data, mode); err != nil {
+		return errx.New("service: writing definition "+path, errx.WithCause(err))
+	}
+	return nil
+}
+func removeDefinition(files files, path string) error {
+	if err := files.remove(path); err != nil {
+		return errx.New("service: removing definition "+path, errx.WithCause(err))
+	}
+	return nil
+}
 
 type backend interface {
 	validate(specification) error
