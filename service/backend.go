@@ -32,7 +32,33 @@ func (osFiles) write(p string, b []byte, m os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(p, b, m)
+	tmp, err := os.CreateTemp(filepath.Dir(p), ".service-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err = tmp.Chmod(m); err == nil {
+		_, err = tmp.Write(b)
+	}
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if err = os.Rename(tmpName, p); err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(p))
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 func (osFiles) remove(p string) error              { return os.Remove(p) }
 func (osFiles) stat(p string) (os.FileInfo, error) { return os.Stat(p) }

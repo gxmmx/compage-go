@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -28,7 +29,7 @@ func systemdArgs(o *operation, a ...string) []string {
 }
 func (b systemdBackend) ensure(c context.Context, o *operation) (EnsureResult, error) {
 	p := systemdPath(o)
-	want := []byte("[Unit]\nDescription=" + o.spec.description + "\n\n[Service]\nExecStart=" + quote(o.spec.binary) + args(o.spec.args) + "\nRestart=on-failure\n\n[Install]\nWantedBy=multi-user.target\n")
+	want := []byte(renderSystemd(o))
 	old, e := o.files.read(p)
 	changed := e != nil || string(old) != string(want)
 	if e != nil && !errors.Is(e, fs.ErrNotExist) {
@@ -70,7 +71,7 @@ func (systemdBackend) status(c context.Context, o *operation) (Status, error) {
 	return s, x
 }
 func quote(v string) string {
-	return `"` + strings.NewReplacer(`\\`, `\\\\`, `"`, `\\"`).Replace(v) + `"`
+	return `"` + strings.NewReplacer("\\", "\\\\", `"`, `\\"`).Replace(v) + `"`
 }
 func args(v []string) string {
 	var r strings.Builder
@@ -79,6 +80,47 @@ func args(v []string) string {
 		r.WriteString(quote(x))
 	}
 	return r.String()
+}
+func renderSystemd(o *operation) string {
+	var b strings.Builder
+	b.WriteString("[Unit]\nDescription=")
+	b.WriteString(o.spec.description)
+	b.WriteString("\n\n[Service]\nExecStart=")
+	b.WriteString(quote(o.spec.binary))
+	b.WriteString(args(o.spec.args))
+	b.WriteString("\nRestart=on-failure\n")
+	if o.spec.scope == System && o.spec.account != nil {
+		b.WriteString("User=")
+		b.WriteString(o.spec.account.Name)
+		b.WriteByte('\n')
+	}
+	keys := make([]string, 0, len(o.spec.env))
+	for k := range o.spec.env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		b.WriteString("Environment=")
+		b.WriteString(quote(k + "=" + o.spec.env[k]))
+		b.WriteByte('\n')
+	}
+	if o.spec.stdout != "" {
+		b.WriteString("StandardOutput=append:")
+		b.WriteString(o.spec.stdout)
+		b.WriteByte('\n')
+	}
+	if o.spec.stderr != "" {
+		b.WriteString("StandardError=append:")
+		b.WriteString(o.spec.stderr)
+		b.WriteByte('\n')
+	}
+	b.WriteString("\n[Install]\nWantedBy=")
+	if o.spec.scope == User {
+		b.WriteString("default.target\n")
+	} else {
+		b.WriteString("multi-user.target\n")
+	}
+	return b.String()
 }
 func reason(v bool) []ChangeReason {
 	if v {

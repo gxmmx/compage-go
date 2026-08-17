@@ -5,7 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
-	"strconv"
+	"sort"
 	"strings"
 )
 
@@ -70,6 +70,9 @@ func (launchdBackend) status(c context.Context, o *operation) (Status, error) {
 	s.Loaded = x == nil
 	s.Running = s.Loaded
 	s.Detail = strings.TrimSpace(out)
+	if x != nil {
+		return s, nil
+	}
 	return s, nil
 }
 func plist(o *operation) string {
@@ -84,11 +87,40 @@ func plist(o *operation) string {
 		b.WriteString(xml(a))
 		b.WriteString("</string>\n")
 	}
+	if len(o.spec.env) > 0 {
+		keys := make([]string, 0, len(o.spec.env))
+		for k := range o.spec.env {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		b.WriteString("<key>EnvironmentVariables</key><dict>\n")
+		for _, k := range keys {
+			b.WriteString("<key>")
+			b.WriteString(xml(k))
+			b.WriteString("</key><string>")
+			b.WriteString(xml(o.spec.env[k]))
+			b.WriteString("</string>\n")
+		}
+		b.WriteString("</dict>\n")
+	}
+	if o.spec.scope == System && o.spec.account != nil {
+		b.WriteString("<key>UserName</key><string>")
+		b.WriteString(xml(o.spec.account.Name))
+		b.WriteString("</string>\n")
+	}
+	if o.spec.stdout != "" {
+		b.WriteString("<key>StandardOutPath</key><string>")
+		b.WriteString(xml(o.spec.stdout))
+		b.WriteString("</string>\n")
+	}
+	if o.spec.stderr != "" {
+		b.WriteString("<key>StandardErrorPath</key><string>")
+		b.WriteString(xml(o.spec.stderr))
+		b.WriteString("</string>\n")
+	}
 	b.WriteString("</array>\n<key>RunAtLoad</key><true/>\n</dict></plist>\n")
 	return b.String()
 }
 func xml(v string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "\"", "&quot;", "'", "&apos;").Replace(v)
 }
-
-var _ = strconv.Itoa

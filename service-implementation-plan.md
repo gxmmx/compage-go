@@ -1,5 +1,33 @@
 # OS service manager implementation plan
 
+## Implementation status
+
+Update this checklist in the same change as each implementation milestone. A
+checked item means it is implemented and covered by the repository check; it
+does not mark adjacent planned behaviour complete.
+
+- [x] Package scaffold, public manager/options/types, `errx`-classified public
+  errors, and package documentation.
+- [x] `host.UserInfo.Home` added so user-scoped service paths use `host.User()`.
+- [x] Isolated backend selection and injectable command, filesystem, and
+  account-enforcement seams.
+- [x] Initial systemd and launchd backends, deterministic systemd/plist
+  rendering, and fake-runner lifecycle coverage.
+- [x] Same-directory atomic definition writer and isolated renderer/idempotency
+  tests.
+- [x] Repository verification with `task check`.
+- [ ] Complete platform-specific validation, identifier validation, and all
+  specification change reasons.
+- [ ] Complete account preflight/error propagation and full privilege checks.
+- [ ] Complete safe filesystem semantics (no implicit system-directory creation,
+  symlink protection, ownership/mode verification, and log-path access checks).
+- [ ] Complete systemd version preflight, machine-readable status parsing, and
+  typed command-manager errors.
+- [ ] Complete launchd enabled/loaded/running/PID/exit-status semantics and
+  no-silent-restart reconciliation detection.
+- [ ] Expand isolated tests to every lifecycle, error, cancellation, drift, and
+  concurrency case in the delivery sequence.
+
 ## Purpose
 
 Add a `service` package to `compage-go` for installing, reconciling, and
