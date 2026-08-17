@@ -43,7 +43,7 @@ func (b systemdBackend) ensure(c context.Context, o *operation) (EnsureResult, e
 		return EnsureResult{}, err
 	}
 	if o.spec.scope == User {
-		if err := o.files.mkdirAll(filepath.Dir(p), 0o755); err != nil {
+		if err := ensureDefinitionDirectory(o.files, p); err != nil {
 			return EnsureResult{}, err
 		}
 	}
@@ -108,6 +108,9 @@ func (systemdBackend) status(c context.Context, o *operation) (Status, error) {
 	s := Status{Installed: e == nil}
 	out, x := o.runner.run(c, "systemctl", systemdArgs(o, "show", "--property=LoadState,UnitFileState,ActiveState,MainPID,ExecMainStatus", "--value", o.spec.name+".service")...)
 	if x != nil {
+		if err := unavailableManager(x, "systemctl"); err != nil {
+			return Status{}, err
+		}
 		return s, nil
 	}
 	values := strings.Split(strings.TrimSpace(out), "\n")
@@ -164,7 +167,16 @@ func renderSystemd(o *operation) string {
 	b.WriteString("\n\n[Service]\nExecStart=")
 	b.WriteString(quote(o.spec.binary))
 	b.WriteString(args(o.spec.args))
-	b.WriteString("\nRestart=on-failure\n")
+	b.WriteString("\nRestart=")
+	switch o.spec.restart {
+	case RestartNever:
+		b.WriteString("no")
+	case RestartAlways:
+		b.WriteString("always")
+	default:
+		b.WriteString("on-failure")
+	}
+	b.WriteByte('\n')
 	if o.spec.scope == System && o.spec.account != nil {
 		b.WriteString("User=")
 		b.WriteString(o.spec.account.Name)

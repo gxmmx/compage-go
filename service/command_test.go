@@ -22,6 +22,12 @@ func TestCommandOutputClassifiesMissingTool(t *testing.T) {
 		t.Fatalf("error=%v", err)
 	}
 }
+func TestUnavailableManagerClassifiesMissingTool(t *testing.T) {
+	err := unavailableManager(exec.ErrNotFound, "systemctl")
+	if !errx.IsKind(err, errx.Unavailable) || !errors.Is(err, exec.ErrNotFound) {
+		t.Fatalf("error=%v", err)
+	}
+}
 
 func (f failingFiles) write(string, []byte, os.FileMode) error { return f.writeErr }
 

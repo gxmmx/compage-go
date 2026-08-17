@@ -87,6 +87,12 @@ func TestLaunchdRevisionParticipatesInRenderedDefinition(t *testing.T) {
 		t.Fatal("plist revision missing")
 	}
 }
+func TestLaunchdRendersRestartPolicy(t *testing.T) {
+	o := operation{spec: specification{name: "com.example.x", binary: "/bin/x", scope: System, restart: RestartOnFailure}}
+	if !strings.Contains(plist(&o), "<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>") {
+		t.Fatal("restart policy missing")
+	}
+}
 
 func TestLaunchdStopAbsentIsIdempotent(t *testing.T) {
 	r := &fakeRunner{}

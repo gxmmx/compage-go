@@ -178,6 +178,12 @@ func TestRevisionParticipatesInRenderedDefinition(t *testing.T) {
 		t.Fatal("systemd revision missing")
 	}
 }
+func TestSystemdRendersRestartPolicy(t *testing.T) {
+	o := operation{spec: specification{name: "x", binary: "/bin/x", scope: System, restart: RestartAlways}}
+	if !strings.Contains(renderSystemd(&o), "Restart=always") {
+		t.Fatal("restart policy missing")
+	}
+}
 
 func TestSystemdStopAbsentIsIdempotent(t *testing.T) {
 	r := &fakeRunner{}

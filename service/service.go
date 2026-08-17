@@ -20,6 +20,14 @@ const (
 	System
 )
 
+type RestartPolicy uint8
+
+const (
+	RestartNever RestartPolicy = iota
+	RestartOnFailure
+	RestartAlways
+)
+
 type ChangeReason string
 
 const (
@@ -50,6 +58,7 @@ type definitionMetadata struct {
 	Stdout      string
 	Stderr      string
 	Revision    string
+	Restart     RestartPolicy
 }
 
 func metadataFor(s specification) definitionMetadata {
@@ -57,7 +66,7 @@ func metadataFor(s specification) definitionMetadata {
 	if s.account != nil {
 		a = s.account.Name
 	}
-	return definitionMetadata{Description: s.description, Binary: s.binary, Args: s.args, Environment: s.env, Account: a, Stdout: s.stdout, Stderr: s.stderr, Revision: s.revision}
+	return definitionMetadata{Description: s.description, Binary: s.binary, Args: s.args, Environment: s.env, Account: a, Stdout: s.stdout, Stderr: s.stderr, Revision: s.revision, Restart: s.restart}
 }
 func metadataComment(s specification) string {
 	raw, _ := json.Marshal(metadataFor(s))
@@ -128,6 +137,7 @@ type specification struct {
 	args                                                []string
 	env                                                 map[string]string
 	scope                                               Scope
+	restart                                             RestartPolicy
 	account                                             *account.Spec
 }
 type Option func(*specification) error
@@ -144,11 +154,17 @@ func WithEnvironment(v map[string]string) Option {
 	return func(s *specification) error { s.env = mapsClone(v); return nil }
 }
 func WithScope(v Scope) Option { return func(s *specification) error { s.scope = v; return nil } }
+func WithRestartPolicy(v RestartPolicy) Option {
+	return func(s *specification) error { s.restart = v; return nil }
+}
 func WithAccount(v account.Spec) Option {
 	return func(s *specification) error { copy := v; s.account = &copy; return nil }
 }
 func WithStdoutLog(v string) Option { return func(s *specification) error { s.stdout = v; return nil } }
 func WithStderrLog(v string) Option { return func(s *specification) error { s.stderr = v; return nil } }
+func WithLog(v string) Option {
+	return func(s *specification) error { s.stdout, s.stderr = v, v; return nil }
+}
 func WithRevision(v string) Option {
 	return func(s *specification) error { s.revision = v; return nil }
 }
@@ -156,7 +172,7 @@ func WithRevision(v string) Option {
 type Manager struct{ op operation }
 
 func New(opts ...Option) (*Manager, error) {
-	s := specification{scope: User}
+	s := specification{scope: User, restart: RestartOnFailure}
 	for _, opt := range opts {
 		if opt == nil {
 			return nil, &ValidationError{Message: "nil option"}
@@ -196,6 +212,9 @@ func (m *Manager) Status(c context.Context) (Status, error)       { return m.op.
 func validate(s specification) error {
 	if s.scope != User && s.scope != System {
 		return &ValidationError{Message: "unknown scope"}
+	}
+	if s.restart != RestartNever && s.restart != RestartOnFailure && s.restart != RestartAlways {
+		return &ValidationError{Message: "unknown restart policy"}
 	}
 	if s.binary == "" || !filepath.IsAbs(s.binary) || filepath.Clean(s.binary) != s.binary {
 		return &ValidationError{Message: "binary must be a clean absolute path"}

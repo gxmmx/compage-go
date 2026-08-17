@@ -176,3 +176,14 @@ func TestValidateRejectsLineInjection(t *testing.T) {
 		}
 	}
 }
+func TestValidateRejectsUnknownRestartPolicy(t *testing.T) {
+	if err := validate(specification{name: "x", binary: "/bin/x", scope: User, restart: 99}); err == nil {
+		t.Fatal("unknown restart accepted")
+	}
+}
+func TestWithLogSetsBothDestinations(t *testing.T) {
+	s := specification{}
+	if err := WithLog("/var/log/x")(&s); err != nil || s.stdout != s.stderr {
+		t.Fatalf("spec=%+v err=%v", s, err)
+	}
+}

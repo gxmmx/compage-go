@@ -38,7 +38,7 @@ func (b launchdBackend) ensure(c context.Context, o *operation) (EnsureResult, e
 		return EnsureResult{}, err
 	}
 	if o.spec.scope == User {
-		if err := o.files.mkdirAll(filepath.Dir(p), 0o755); err != nil {
+		if err := ensureDefinitionDirectory(o.files, p); err != nil {
 			return EnsureResult{}, err
 		}
 	}
@@ -114,6 +114,11 @@ func (launchdBackend) status(c context.Context, o *operation) (Status, error) {
 	}
 	s := Status{Installed: e == nil}
 	out, x := o.runner.run(c, "launchctl", "print", domain(o)+"/"+o.spec.name)
+	if x != nil {
+		if err := unavailableManager(x, "launchctl"); err != nil {
+			return Status{}, err
+		}
+	}
 	s.Loaded = x == nil
 	s.Detail = strings.TrimSpace(out)
 	for _, line := range strings.Split(out, "\n") {
@@ -185,6 +190,11 @@ func plist(o *operation) string {
 		b.WriteString("<key>StandardErrorPath</key><string>")
 		b.WriteString(xml(o.spec.stderr))
 		b.WriteString("</string>\n")
+	}
+	if o.spec.restart == RestartAlways {
+		b.WriteString("<key>KeepAlive</key><true/>\n")
+	} else if o.spec.restart == RestartOnFailure {
+		b.WriteString("<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>\n")
 	}
 	b.WriteString("<key>RunAtLoad</key><true/>\n</dict></plist>\n")
 	return b.String()

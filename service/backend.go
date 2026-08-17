@@ -80,13 +80,27 @@ func rejectSymlink(files files, path string) error {
 		return nil
 	}
 	if err != nil {
-		return err
+		return errx.New("service: inspecting definition path "+path, errx.WithCause(err))
 	}
 	if info == nil {
 		return errx.New("service: inspecting definition path: empty file information")
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		return &ValidationError{Message: "service definition path must not be a symlink"}
+	}
+	return nil
+}
+
+func ensureDefinitionDirectory(files files, path string) error {
+	if err := files.mkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return errx.New("service: creating definition directory "+filepath.Dir(path), errx.WithCause(err))
+	}
+	return nil
+}
+
+func unavailableManager(err error, name string) error {
+	if errors.Is(err, exec.ErrNotFound) {
+		return &UnsupportedError{Capability: name, Cause: errx.New("service: resolving manager "+name, errx.WithCause(err))}
 	}
 	return nil
 }
