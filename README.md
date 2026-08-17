@@ -30,8 +30,10 @@ task check
 
 `task test` runs uncached tests across the repository and `task test:race` runs the
 same suite with Go's race detector. Target one package directory with a wildcard task:
-`task test:config` or `task test:race:config`. `task check` additionally runs format,
-vet, and the config fuzz targets.
+`task test:config` or `task test:race:config`. `task check` additionally verifies
+formatting and tidy module metadata, runs vet and race tests, and executes the
+config fuzz targets. The fuzz step is config-only because it is currently the
+repository's only package with fuzz tests.
 
 ## Quick start
 

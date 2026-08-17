@@ -16,6 +16,11 @@ tasks:
     cmds:
       - go vet ./...
 
+  mod:check:
+    desc: Verify module metadata is tidy without changing it
+    cmds:
+      - go mod tidy -diff
+
   test:
     desc: Run uncached tests across every package
     cmds:
@@ -56,5 +61,5 @@ tasks:
       - go test -count=1 .
 
   check:
-    desc: Format-check, vet, and test the repository
-    deps: ['fmt:check', vet, test, test:race, test:fuzz]
+    desc: Verify formatting, module metadata, vet, tests, race tests, and fuzz smoke tests
+    deps: ['fmt:check', mod:check, vet, test, test:race, test:fuzz]
