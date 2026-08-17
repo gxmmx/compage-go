@@ -14,7 +14,12 @@ const minimumSystemdVersion = 260
 
 type systemdBackend struct{}
 
-func (systemdBackend) validate(specification) error { return nil }
+func (systemdBackend) validate(s specification) error {
+	if strings.HasSuffix(s.name, ".service") {
+		return &ValidationError{Message: "name must not include .service suffix"}
+	}
+	return nil
+}
 func systemdPath(o *operation) string {
 	if o.spec.scope == System {
 		return filepath.Join("/etc/systemd/system", o.spec.name+".service")

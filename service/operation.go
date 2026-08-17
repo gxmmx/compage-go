@@ -34,4 +34,29 @@ func (o *operation) ensure(c context.Context) (EnsureResult, error) {
 	return x, e
 }
 
+func (o *operation) start(c context.Context) error {
+	if err := c.Err(); err != nil {
+		return errx.New("service: start cancelled", errx.WithCause(err))
+	}
+	return o.backend.start(c, o)
+}
+func (o *operation) stop(c context.Context) error {
+	if err := c.Err(); err != nil {
+		return errx.New("service: stop cancelled", errx.WithCause(err))
+	}
+	return o.backend.stop(c, o)
+}
+func (o *operation) uninstall(c context.Context) error {
+	if err := c.Err(); err != nil {
+		return errx.New("service: uninstall cancelled", errx.WithCause(err))
+	}
+	return o.backend.uninstall(c, o)
+}
+func (o *operation) status(c context.Context) (Status, error) {
+	if err := c.Err(); err != nil {
+		return Status{}, errx.New("service: status cancelled", errx.WithCause(err))
+	}
+	return o.backend.status(c, o)
+}
+
 var _ = os.ErrNotExist

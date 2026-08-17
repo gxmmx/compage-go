@@ -11,7 +11,12 @@ import (
 
 type launchdBackend struct{}
 
-func (launchdBackend) validate(specification) error { return nil }
+func (launchdBackend) validate(s specification) error {
+	if !strings.Contains(s.name, ".") {
+		return &ValidationError{Message: "launchd label must contain a namespace dot"}
+	}
+	return nil
+}
 func launchdPath(o *operation) string {
 	if o.spec.scope == System {
 		return filepath.Join("/Library/LaunchDaemons", o.spec.name+".plist")

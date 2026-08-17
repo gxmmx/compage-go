@@ -107,10 +107,10 @@ func New(opts ...Option) (*Manager, error) {
 	return &Manager{op: operation{spec: s, platform: p, user: u, root: host.IsRoot(), backend: b, runner: execRunner{}, files: osFiles{}, ensureAccount: account.Ensure}}, nil
 }
 func (m *Manager) Ensure(c context.Context) (EnsureResult, error) { return m.op.ensure(c) }
-func (m *Manager) Start(c context.Context) error                  { return m.op.backend.start(c, &m.op) }
-func (m *Manager) Stop(c context.Context) error                   { return m.op.backend.stop(c, &m.op) }
-func (m *Manager) Uninstall(c context.Context) error              { return m.op.backend.uninstall(c, &m.op) }
-func (m *Manager) Status(c context.Context) (Status, error)       { return m.op.backend.status(c, &m.op) }
+func (m *Manager) Start(c context.Context) error                  { return m.op.start(c) }
+func (m *Manager) Stop(c context.Context) error                   { return m.op.stop(c) }
+func (m *Manager) Uninstall(c context.Context) error              { return m.op.uninstall(c) }
+func (m *Manager) Status(c context.Context) (Status, error)       { return m.op.status(c) }
 func validate(s specification) error {
 	if s.scope != User && s.scope != System {
 		return &ValidationError{Message: "unknown scope"}
@@ -118,7 +118,7 @@ func validate(s specification) error {
 	if s.binary == "" || !filepath.IsAbs(s.binary) || filepath.Clean(s.binary) != s.binary {
 		return &ValidationError{Message: "binary must be a clean absolute path"}
 	}
-	if s.name == "" || strings.ContainsAny(s.name, "/\\\x00 \t\n") {
+	if !validServiceName(s.name) {
 		return &ValidationError{Message: "invalid service name"}
 	}
 	if s.scope == User && s.account != nil {
@@ -135,6 +135,17 @@ func validate(s specification) error {
 		}
 	}
 	return nil
+}
+func validServiceName(v string) bool {
+	if v == "" || v == "." || v == ".." || strings.HasPrefix(v, "-") {
+		return false
+	}
+	for _, r := range v {
+		if !(r == '.' || r == '-' || r == '_' || r == ':' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			return false
+		}
+	}
+	return true
 }
 func validEnv(v string) bool {
 	if v == "" {
