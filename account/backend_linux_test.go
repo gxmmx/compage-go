@@ -3,9 +3,13 @@ package account
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os/user"
 	"reflect"
+	"syscall"
 	"testing"
+
+	"github.com/gxmmx/compage-go/host"
 )
 
 func TestLinuxCreateRendersDeclaredSpec(t *testing.T) {
@@ -118,6 +122,25 @@ func TestLinuxGroupGIDVerificationReturnsDrift(t *testing.T) {
 		t.Fatalf("ensureGroup() error = %v", err)
 	}
 }
+
+func TestLinuxReconcilesAndVerifiesExistingGroupGID(t *testing.T) {
+	t.Parallel()
+	store := &mutableStore{groups: map[string]*user.Group{"worker": {Name: "worker", Gid: "100"}}}
+	runner := &scriptRunner{onCall: func(name string, args []string) {
+		if name == "groupmod" {
+			store.groups["worker"].Gid = "200"
+		}
+	}}
+	b := linuxBackend{backendDeps: backendDeps{store: store, runner: runner}}
+	gid := 200
+	created, err := b.ensureGroup(context.Background(), Spec{Group: "worker", GID: &gid})
+	if err != nil || created || store.groups["worker"].Gid != "200" {
+		t.Fatalf("ensureGroup() = %v, %v; group = %#v", created, err, store.groups["worker"])
+	}
+	if !runner.contains([]string{"groupmod", "--gid", "200", "worker"}) {
+		t.Fatalf("commands = %#v", runner.calls)
+	}
+}
 func TestLinuxRejectsUnavailableCommandCapability(t *testing.T) {
 	t.Parallel()
 	b := linuxBackend{backendDeps: backendDeps{runner: &recordingRunner{}}}
@@ -139,5 +162,63 @@ func TestLinuxPreflightChecksRequiredCommandsWithoutMutation(t *testing.T) {
 	}
 	if !runner.contains([]string{"useradd", "--help"}) || !runner.contains([]string{"groupadd", "--help"}) {
 		t.Fatalf("commands = %#v", runner.calls)
+	}
+}
+
+func TestLinuxEnsureHomeCreatesOwnsChmodsAndVerifies(t *testing.T) {
+	t.Parallel()
+	files := &trackingFS{info: testFileInfo{mode: fs.ModeDir | 0o700, sys: &syscall.Stat_t{Uid: 101, Gid: 201}}}
+	b := linuxBackend{backendDeps: backendDeps{store: lookupStore(), runner: outputRunner{value: "worker:x:101:201:Worker:/srv/worker:/usr/sbin/nologin\n"}, fs: files}}
+	if err := b.ensureHome(context.Background(), Spec{Name: "worker", Home: "/srv/worker", HomeMode: 0o700}); err != nil {
+		t.Fatalf("ensureHome() error = %v", err)
+	}
+	if files.mkdirs != 1 || files.chowns != 1 || files.chmods != 1 || files.lastMode != 0o700 {
+		t.Fatalf("filesystem calls = %#v", files)
+	}
+}
+
+func TestLinuxEnsureCreatesThenRechecksObservedRecord(t *testing.T) {
+	t.Parallel()
+	store := &mutableStore{groups: map[string]*user.Group{"worker": {Name: "worker", Gid: "201"}}, ids: []string{"201"}}
+	runner := &scriptRunner{onCall: func(name string, _ []string) {
+		if name == "useradd" {
+			store.account = &user.User{Username: "worker", Uid: "101", Gid: "201"}
+		}
+	}, outFor: func(name string, _ []string) string {
+		if name == "getent" {
+			return "worker:x:101:201:Worker:/srv/worker:/usr/sbin/nologin\n"
+		}
+		return ""
+	}}
+	b := linuxBackend{backendDeps: backendDeps{store: store, runner: runner}}
+	op := operation{deps: dependencies{platform: host.PlatformInfo{OS: host.Linux}, root: true, backend: b}}
+	uid := 101
+	got, err := op.run(context.Background(), Spec{Name: "worker", Kind: Regular, UID: &uid, Group: "worker", Shell: "/usr/sbin/nologin", Groups: []string{}}, true)
+	if err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if !got.Created || got.Account.Name != "worker" || got.Account.UID != "101" {
+		t.Fatalf("Ensure() = %#v", got)
+	}
+}
+
+func TestLinuxEnsureRechecksExactSupplementaryGroups(t *testing.T) {
+	t.Parallel()
+	store := &mutableStore{account: &user.User{Username: "worker", Uid: "101", Gid: "201"}, groups: map[string]*user.Group{"worker": {Name: "worker", Gid: "201"}, "logs": {Name: "logs", Gid: "301"}, "metrics": {Name: "metrics", Gid: "302"}}, ids: []string{"201", "301"}}
+	runner := &scriptRunner{onCall: func(name string, _ []string) {
+		if name == "usermod" {
+			store.ids = []string{"201", "302"}
+		}
+	}, outFor: func(name string, _ []string) string {
+		if name == "getent" {
+			return "worker:x:101:201:Worker:/srv/worker:/usr/sbin/nologin\n"
+		}
+		return ""
+	}}
+	b := linuxBackend{backendDeps: backendDeps{store: store, runner: runner}}
+	op := operation{deps: dependencies{platform: host.PlatformInfo{OS: host.Linux}, root: true, backend: b}}
+	got, err := op.run(context.Background(), Spec{Name: "worker", Groups: []string{"metrics"}, Existing: Reconcile}, true)
+	if err != nil || !reflect.DeepEqual(got.Account.Groups, []string{"metrics"}) {
+		t.Fatalf("Ensure() = %#v, %v", got, err)
 	}
 }

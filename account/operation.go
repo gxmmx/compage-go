@@ -84,6 +84,15 @@ func (o operation) run(ctx context.Context, spec Spec, apply bool) (EnsureResult
 		if remaining := compare(spec, created); len(remaining) > 0 {
 			return result, &DriftError{Changes: remaining}
 		}
+		if spec.HomePolicy != LeaveHomeUnchanged {
+			exists, err := o.deps.backend.homeExists(ctx, spec.Home)
+			if err != nil {
+				return result, err
+			}
+			if !exists {
+				return result, &DriftError{Changes: []Change{{Field: "home directory", Before: "absent", After: "present"}}}
+			}
+		}
 		return result, nil
 	}
 	changes := compare(spec, record)

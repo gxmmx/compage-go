@@ -70,6 +70,15 @@ func TestEnsureReturnsOnlyCompletedChangesAfterPartialFailure(t *testing.T) {
 		t.Fatalf("Ensure = %#v, %v; want completed group mutation and cause", got, err)
 	}
 }
+func TestEnsureCreationRequiresDeclaredHome(t *testing.T) {
+	t.Parallel()
+	b := &fakeBackend{lookupErr: &NotFoundError{Key: "worker"}, after: Record{Name: "worker", Home: "/srv/worker"}}
+	_, err := testOperation(b, true).run(context.Background(), Spec{Name: "worker", Group: "worker", Home: "/srv/worker", HomePolicy: RequireHome, Existing: Reconcile}, true)
+	var drift *DriftError
+	if !errors.As(err, &drift) || b.applies != 1 {
+		t.Fatalf("Ensure error = %v, applies = %d", err, b.applies)
+	}
+}
 func TestValidate(t *testing.T) {
 	t.Parallel()
 	for _, s := range []Spec{{Name: ""}, {Name: "bad name"}, {Name: "-option"}, {Name: "worker", Groups: []string{"-option"}}, {Name: "worker", HomePolicy: EnsureHome, Home: "relative"}, {Name: "worker", UID: intPtr(-1)}} {
@@ -96,7 +105,7 @@ type fakeBackend struct {
 
 func (f *fakeBackend) lookup(context.Context, string, bool) (Record, error) {
 	f.lookups++
-	if f.lookupErr != nil {
+	if f.lookupErr != nil && f.applies == 0 {
 		return Record{}, f.lookupErr
 	}
 	if f.applies > 0 {

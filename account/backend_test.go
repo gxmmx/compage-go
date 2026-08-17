@@ -85,6 +85,7 @@ type scriptRunner struct {
 	calls  [][]string
 	onCall func(string, []string)
 	errFor func(string, []string) error
+	outFor func(string, []string) string
 }
 
 func (r outputRunner) output(context.Context, string, ...string) (string, error) { return r.value, nil }
@@ -104,6 +105,9 @@ func (r *scriptRunner) output(_ context.Context, name string, args ...string) (s
 	}
 	if len(args) == 1 && args[0] == "--help" {
 		return "--system --uid --gid --home-dir --home --shell --groups --no-create-home --create-home", nil
+	}
+	if r.outFor != nil {
+		return r.outFor(name, args), nil
 	}
 	return "", nil
 }
@@ -140,15 +144,22 @@ func (f fakeStore) lookupGroup(string) (*user.Group, error) {
 }
 func (f fakeStore) lookupGroupID(string) (*user.Group, error) { return nil, errors.New("missing") }
 
-type mutableStore struct{ groups map[string]*user.Group }
+type mutableStore struct {
+	groups  map[string]*user.Group
+	account *user.User
+	ids     []string
+}
 
 func (s *mutableStore) lookup(string) (*user.User, error) {
-	return nil, user.UnknownUserError("worker")
+	if s.account == nil {
+		return nil, user.UnknownUserError("worker")
+	}
+	return s.account, nil
 }
 func (s *mutableStore) lookupID(string) (*user.User, error) {
 	return nil, errors.New("unknown user ID")
 }
-func (s *mutableStore) groupIDs(*user.User) ([]string, error) { return nil, nil }
+func (s *mutableStore) groupIDs(*user.User) ([]string, error) { return s.ids, nil }
 func (s *mutableStore) lookupGroup(name string) (*user.Group, error) {
 	group, ok := s.groups[name]
 	if !ok {
@@ -206,6 +217,22 @@ func (s memoryStore) lookupGroupID(id string) (*user.Group, error) {
 type fakeFS struct {
 	err, mkdirErr error
 	info          os.FileInfo
+}
+
+type trackingFS struct {
+	info                   os.FileInfo
+	mkdirs, chowns, chmods int
+	lastUID, lastGID       int
+	lastMode               os.FileMode
+}
+
+func (f *trackingFS) stat(string) (os.FileInfo, error) { return f.info, nil }
+func (f *trackingFS) mkdir(string, os.FileMode) error  { f.mkdirs++; return nil }
+func (f *trackingFS) chown(string, int, int) error     { f.chowns++; return nil }
+func (f *trackingFS) chmod(_ string, mode os.FileMode) error {
+	f.chmods++
+	f.lastMode = mode
+	return nil
 }
 
 func (f fakeFS) stat(string) (os.FileInfo, error) { return f.info, f.err }
