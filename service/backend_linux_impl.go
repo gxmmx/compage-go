@@ -16,6 +16,16 @@ const minimumSystemdVersion = 260
 
 type systemdBackend struct{}
 
+func (systemdBackend) directoryBases(scope Scope, home string) (AppDirectories, error) {
+	if scope == User {
+		return userDirectoryBases(home)
+	}
+	if scope != System {
+		return AppDirectories{}, &ValidationError{Message: "unknown scope"}
+	}
+	return AppDirectories{Runtime: "/run", Config: "/etc", State: "/var/lib", Logs: "/var/log"}, nil
+}
+
 func (systemdBackend) validate(s specification) error {
 	if strings.HasSuffix(s.name, ".service") {
 		return &ValidationError{Message: "name must not include .service suffix"}

@@ -181,9 +181,12 @@ func TestValidateRejectsUnknownRestartPolicy(t *testing.T) {
 		t.Fatal("unknown restart accepted")
 	}
 }
-func TestWithLogSetsBothDestinations(t *testing.T) {
+func TestLogOptionsDeclareManagedFiles(t *testing.T) {
 	s := specification{}
-	if err := WithLog("/var/log/x")(&s); err != nil || s.stdout != s.stderr {
+	if err := WithStdoutLog()(&s); err != nil || s.stdoutLog == nil || *s.stdoutLog != "" {
+		t.Fatalf("spec=%+v err=%v", s, err)
+	}
+	if err := WithStderrLog("worker.err")(&s); err != nil || s.stderrLog == nil || *s.stderrLog != "worker.err" {
 		t.Fatalf("spec=%+v err=%v", s, err)
 	}
 }

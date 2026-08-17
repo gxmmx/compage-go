@@ -14,6 +14,18 @@ import (
 
 type launchdBackend struct{}
 
+func (launchdBackend) directoryBases(scope Scope, home string) (AppDirectories, error) {
+	if scope == User {
+		return userDirectoryBases(home)
+	}
+	if scope != System {
+		return AppDirectories{}, &ValidationError{Message: "unknown scope"}
+	}
+	// /var is a symlink to /private/var on macOS. Use the canonical path because
+	// managed directory traversal intentionally rejects symlink components.
+	return AppDirectories{Runtime: "/private/var/run", Config: "/Library/Application Support", State: "/Library/Application Support", Logs: "/Library/Logs"}, nil
+}
+
 func (launchdBackend) validate(s specification) error {
 	if !strings.Contains(s.name, ".") {
 		return &ValidationError{Message: "launchd label must contain a namespace dot"}

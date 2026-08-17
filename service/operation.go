@@ -40,11 +40,23 @@ func (o *operation) ensure(c context.Context) (EnsureResult, error) {
 	if r.Account != nil {
 		uid, gid = r.Account.Account.UID, r.Account.Account.GID
 	}
-	if err := checkLogParents(o.files, o.spec, uid, gid); err != nil {
+	d, err := resolveDirectories(o.spec, o.backend, o.user)
+	if err != nil {
+		return r, errx.New("service: resolving directories", errx.WithCause(err))
+	}
+	r.Directories = d.AppDirectories
+	changes, err := o.reconcileDirectories(d, uid, gid)
+	r.DirectoryChanges = changes
+	if len(changes) > 0 {
+		r.Changed = true
+		r.Reasons = append(r.Reasons, DirectoriesChanged)
+	}
+	if err != nil {
 		return r, err
 	}
 	x, e := o.backend.ensure(c, o)
 	x.Account = r.Account
+	x.Directories, x.DirectoryChanges = r.Directories, r.DirectoryChanges
 	if r.Changed {
 		x.Changed = true
 		x.Reasons = append(x.Reasons, r.Reasons...)
@@ -146,7 +158,44 @@ func (o *operation) uninstall(c context.Context) error {
 	if err := o.systemPreflight(); err != nil {
 		return err
 	}
-	return o.backend.uninstall(c, o)
+	if err := o.backend.uninstall(c, o); err != nil {
+		return err
+	}
+	d, err := resolveDirectories(o.spec, o.backend, o.user)
+	if err != nil {
+		return err
+	}
+	if d.runtime {
+		return o.cleanupManaged(d.Runtime)
+	}
+	return nil
+}
+
+func (o *operation) purge(c context.Context, options PurgeOptions) error {
+	if err := c.Err(); err != nil {
+		return errx.New("service: purge cancelled", errx.WithCause(err))
+	}
+	if err := o.systemPreflight(); err != nil {
+		return err
+	}
+	d, err := resolveDirectories(o.spec, o.backend, o.user)
+	if err != nil {
+		return err
+	}
+	for _, item := range []struct {
+		selected, declared bool
+		path               string
+	}{{options.Config, d.config, d.Config}, {options.State, d.state, d.State}, {options.Logs, d.logs, d.Logs}} {
+		if item.selected {
+			if !item.declared {
+				return &ValidationError{Message: "cannot purge an undeclared managed directory"}
+			}
+			if err := o.cleanupManaged(item.path); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 func (o *operation) status(c context.Context) (Status, error) {
 	if err := c.Err(); err != nil {

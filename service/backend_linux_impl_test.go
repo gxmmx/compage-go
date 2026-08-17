@@ -31,7 +31,9 @@ func (f *fakeFiles) write(p string, v []byte, _ os.FileMode) error {
 	return nil
 }
 func (f *fakeFiles) mkdirAll(string, os.FileMode) error { return nil }
+func (f *fakeFiles) mkdir(string, os.FileMode) error    { return nil }
 func (f *fakeFiles) remove(p string) error              { delete(f.values, p); return nil }
+func (f *fakeFiles) removeAll(p string) error           { delete(f.values, p); return nil }
 func (f *fakeFiles) chmod(string, os.FileMode) error    { f.chmodCalls++; return nil }
 func (f *fakeFiles) chown(string, int, int) error       { f.chownCalls++; return nil }
 func (f *fakeFiles) stat(p string) (os.FileInfo, error) {

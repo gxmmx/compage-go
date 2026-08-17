@@ -39,14 +39,17 @@ const (
 	RevisionChanged    ChangeReason = "revision_changed"
 	DefinitionDrift    ChangeReason = "definition_drift"
 	AccountChanged     ChangeReason = "account_changed"
+	DirectoriesChanged ChangeReason = "directories_changed"
 )
 
 type EnsureResult struct {
-	Installed       bool
-	Changed         bool
-	Reasons         []ChangeReason
-	RestartRequired bool
-	Account         *account.EnsureResult
+	Installed        bool
+	Changed          bool
+	Reasons          []ChangeReason
+	RestartRequired  bool
+	Account          *account.EnsureResult
+	Directories      AppDirectories
+	DirectoryChanges []DirectoryChange
 }
 
 type definitionMetadata struct {
@@ -139,6 +142,9 @@ type specification struct {
 	scope                                               Scope
 	restart                                             RestartPolicy
 	account                                             *account.Spec
+	runtimeDir, configDir, stateDir, logDir             *string
+	configWritable, configReadDeclared                  bool
+	stdoutLog, stderrLog                                *string
 }
 type Option func(*specification) error
 
@@ -160,10 +166,87 @@ func WithRestartPolicy(v RestartPolicy) Option {
 func WithAccount(v account.Spec) Option {
 	return func(s *specification) error { copy := v; s.account = &copy; return nil }
 }
-func WithStdoutLog(v string) Option { return func(s *specification) error { s.stdout = v; return nil } }
-func WithStderrLog(v string) Option { return func(s *specification) error { s.stderr = v; return nil } }
-func WithLog(v string) Option {
-	return func(s *specification) error { s.stdout, s.stderr = v, v; return nil }
+func WithRuntimeDir(v ...string) Option {
+	return directoryOption("runtime directory", v, func(s *specification, p *string) { s.runtimeDir = p })
+}
+func WithConfigDir(v ...string) Option {
+	return func(s *specification) error {
+		if s.configWritable {
+			return &ValidationError{Message: "config directory and config directory write cannot both be declared"}
+		}
+		if err := setDirectory("config directory", v, func(p *string) { s.configDir = p }); err != nil {
+			return err
+		}
+		s.configReadDeclared = true
+		return nil
+	}
+}
+func WithConfigDirWrite(v ...string) Option {
+	return func(s *specification) error {
+		if s.configReadDeclared {
+			return &ValidationError{Message: "config directory and config directory write cannot both be declared"}
+		}
+		if err := setDirectory("config directory", v, func(p *string) { s.configDir = p }); err != nil {
+			return err
+		}
+		s.configWritable = true
+		return nil
+	}
+}
+func WithStateDir(v ...string) Option {
+	return directoryOption("state directory", v, func(s *specification, p *string) { s.stateDir = p })
+}
+func WithLogDir(v ...string) Option {
+	return directoryOption("log directory", v, func(s *specification, p *string) { s.logDir = p })
+}
+func WithStdoutLog(v ...string) Option {
+	return logOption("stdout log", v, func(s *specification, p *string) { s.stdoutLog = p })
+}
+func WithStderrLog(v ...string) Option {
+	return logOption("stderr log", v, func(s *specification, p *string) { s.stderrLog = p })
+}
+
+func directoryOption(label string, values []string, set func(*specification, *string)) Option {
+	return func(s *specification) error {
+		var p *string
+		if err := setDirectory(label, values, func(v *string) { p = v }); err != nil {
+			return err
+		}
+		set(s, p)
+		return nil
+	}
+}
+func setDirectory(label string, values []string, set func(*string)) error {
+	if len(values) > 1 {
+		return &ValidationError{Message: label + " accepts at most one name"}
+	}
+	if len(values) == 0 {
+		v := ""
+		set(&v)
+		return nil
+	}
+	if !validRelativeDirectory(values[0]) {
+		return &ValidationError{Message: "invalid " + label}
+	}
+	v := values[0]
+	set(&v)
+	return nil
+}
+func logOption(label string, values []string, set func(*specification, *string)) Option {
+	return func(s *specification) error {
+		if len(values) > 1 {
+			return &ValidationError{Message: label + " accepts at most one filename"}
+		}
+		v := ""
+		if len(values) == 1 {
+			v = values[0]
+		}
+		if v != "" && !validLogFilename(v) {
+			return &ValidationError{Message: "invalid " + label}
+		}
+		set(s, &v)
+		return nil
+	}
 }
 func WithRevision(v string) Option {
 	return func(s *specification) error { s.revision = v; return nil }
@@ -204,11 +287,12 @@ func New(opts ...Option) (*Manager, error) {
 	}
 	return &Manager{op: operation{spec: s, platform: p, user: u, root: host.IsRoot(), backend: b, runner: execRunner{}, files: osFiles{}, ensureAccount: account.Ensure}}, nil
 }
-func (m *Manager) Ensure(c context.Context) (EnsureResult, error) { return m.op.ensure(c) }
-func (m *Manager) Start(c context.Context) error                  { return m.op.start(c) }
-func (m *Manager) Stop(c context.Context) error                   { return m.op.stop(c) }
-func (m *Manager) Uninstall(c context.Context) error              { return m.op.uninstall(c) }
-func (m *Manager) Status(c context.Context) (Status, error)       { return m.op.status(c) }
+func (m *Manager) Ensure(c context.Context) (EnsureResult, error)      { return m.op.ensure(c) }
+func (m *Manager) Start(c context.Context) error                       { return m.op.start(c) }
+func (m *Manager) Stop(c context.Context) error                        { return m.op.stop(c) }
+func (m *Manager) Uninstall(c context.Context) error                   { return m.op.uninstall(c) }
+func (m *Manager) Purge(c context.Context, options PurgeOptions) error { return m.op.purge(c, options) }
+func (m *Manager) Status(c context.Context) (Status, error)            { return m.op.status(c) }
 func validate(s specification) error {
 	if s.scope != User && s.scope != System {
 		return &ValidationError{Message: "unknown scope"}
@@ -231,10 +315,8 @@ func validate(s specification) error {
 	if s.scope == User && s.account != nil {
 		return &ValidationError{Message: "account requires system scope"}
 	}
-	for _, p := range []string{s.stdout, s.stderr} {
-		if p != "" && (!filepath.IsAbs(p) || filepath.Clean(p) != p) {
-			return &ValidationError{Message: "log path must be a clean absolute path"}
-		}
+	if s.configWritable && s.configDir == nil {
+		return &ValidationError{Message: "config write requires config directory"}
 	}
 	for k, v := range s.env {
 		if !validEnv(k) || strings.ContainsAny(v, "\x00\r\n") {
@@ -247,6 +329,20 @@ func validate(s specification) error {
 		}
 	}
 	return nil
+}
+func validRelativeDirectory(v string) bool {
+	if v == "" || filepath.IsAbs(v) || filepath.Clean(v) != v || strings.ContainsAny(v, "\\\x00\r\n\t") {
+		return false
+	}
+	for _, part := range strings.Split(v, "/") {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
+}
+func validLogFilename(v string) bool {
+	return v != "" && filepath.Base(v) == v && filepath.Clean(v) == v && !strings.ContainsAny(v, "/\\\x00\r\n\t") && v != "." && v != ".."
 }
 func validServiceName(v string) bool {
 	if v == "" || v == "." || v == ".." || strings.HasPrefix(v, "-") {

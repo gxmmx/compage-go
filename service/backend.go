@@ -29,7 +29,9 @@ type files interface {
 	read(string) ([]byte, error)
 	write(string, []byte, os.FileMode) error
 	mkdirAll(string, os.FileMode) error
+	mkdir(string, os.FileMode) error
 	remove(string) error
+	removeAll(string) error
 	chmod(string, os.FileMode) error
 	chown(string, int, int) error
 	stat(string) (os.FileInfo, error)
@@ -68,7 +70,9 @@ func (osFiles) write(p string, b []byte, m os.FileMode) error {
 	return dir.Sync()
 }
 func (osFiles) mkdirAll(p string, m os.FileMode) error { return os.MkdirAll(p, m) }
+func (osFiles) mkdir(p string, m os.FileMode) error    { return os.Mkdir(p, m) }
 func (osFiles) remove(p string) error                  { return os.Remove(p) }
+func (osFiles) removeAll(p string) error               { return os.RemoveAll(p) }
 func (osFiles) chmod(p string, m os.FileMode) error    { return os.Chmod(p, m) }
 func (osFiles) chown(p string, u, g int) error         { return os.Chown(p, u, g) }
 func (osFiles) stat(p string) (os.FileInfo, error)     { return os.Stat(p) }
@@ -187,12 +191,16 @@ func verifyDefinitionOwner(files files, path string, uid, gid int) error {
 }
 
 type backend interface {
+	directoryProvider
 	validate(specification) error
 	ensure(context.Context, *operation) (EnsureResult, error)
 	start(context.Context, *operation) error
 	stop(context.Context, *operation) error
 	uninstall(context.Context, *operation) error
 	status(context.Context, *operation) (Status, error)
+}
+type directoryProvider interface {
+	directoryBases(Scope, string) (AppDirectories, error)
 }
 type operation struct {
 	spec          specification
