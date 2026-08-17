@@ -49,6 +49,7 @@ func (b systemdBackend) ensure(c context.Context, o *operation) (EnsureResult, e
 	}
 	want := []byte(renderSystemd(o))
 	old, e := readDefinition(o.files, p)
+	absent := errors.Is(e, fs.ErrNotExist)
 	changed := e != nil || string(old) != string(want)
 	if e != nil && !errors.Is(e, fs.ErrNotExist) {
 		return EnsureResult{}, e
@@ -61,7 +62,7 @@ func (b systemdBackend) ensure(c context.Context, o *operation) (EnsureResult, e
 			return EnsureResult{}, e
 		}
 	}
-	return EnsureResult{Installed: true, Changed: changed, Reasons: reason(changed)}, nil
+	return EnsureResult{Installed: true, Changed: changed, Reasons: changeReasons(old, o.spec, changed, absent)}, nil
 }
 func (systemdBackend) start(c context.Context, o *operation) error {
 	if err := checkSystemdVersion(c, o); err != nil {
@@ -71,6 +72,9 @@ func (systemdBackend) start(c context.Context, o *operation) error {
 	return e
 }
 func (systemdBackend) stop(c context.Context, o *operation) error {
+	if _, err := o.files.stat(systemdPath(o)); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err := checkSystemdVersion(c, o); err != nil {
 		return err
 	}
@@ -98,6 +102,9 @@ func (systemdBackend) status(c context.Context, o *operation) (Status, error) {
 		return Status{}, err
 	}
 	_, e := o.files.stat(systemdPath(o))
+	if e != nil && !errors.Is(e, fs.ErrNotExist) {
+		return Status{}, errx.New("service: inspecting definition "+systemdPath(o), errx.WithCause(e))
+	}
 	s := Status{Installed: e == nil}
 	out, x := o.runner.run(c, "systemctl", systemdArgs(o, "show", "--property=LoadState,UnitFileState,ActiveState,MainPID,ExecMainStatus", "--value", o.spec.name+".service")...)
 	if x != nil {
@@ -132,7 +139,7 @@ func checkSystemdVersion(c context.Context, o *operation) error {
 	return nil
 }
 func quote(v string) string {
-	return `"` + strings.NewReplacer("\\", "\\\\", `"`, `\\"`).Replace(v) + `"`
+	return `"` + strings.NewReplacer("\\", "\\\\", "\"", "\\\"").Replace(v) + `"`
 }
 func args(v []string) string {
 	var r strings.Builder
@@ -144,6 +151,14 @@ func args(v []string) string {
 }
 func renderSystemd(o *operation) string {
 	var b strings.Builder
+	b.WriteString("# compage-spec: ")
+	b.WriteString(metadataComment(o.spec))
+	b.WriteByte('\n')
+	if o.spec.revision != "" {
+		b.WriteString("# compage-revision: ")
+		b.WriteString(o.spec.revision)
+		b.WriteByte('\n')
+	}
 	b.WriteString("[Unit]\nDescription=")
 	b.WriteString(o.spec.description)
 	b.WriteString("\n\n[Service]\nExecStart=")
@@ -182,10 +197,4 @@ func renderSystemd(o *operation) string {
 		b.WriteString("multi-user.target\n")
 	}
 	return b.String()
-}
-func reason(v bool) []ChangeReason {
-	if v {
-		return []ChangeReason{DefinitionDrift}
-	}
-	return nil
 }

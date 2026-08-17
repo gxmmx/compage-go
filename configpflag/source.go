@@ -1,4 +1,3 @@
-// Package configpflag adapts pflag flag sets to config.FlagSource.
 package configpflag
 
 import (

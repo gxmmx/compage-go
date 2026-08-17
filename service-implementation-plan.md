@@ -16,17 +16,31 @@ does not mark adjacent planned behaviour complete.
 - [x] Same-directory atomic definition writer and isolated renderer/idempotency
   tests.
 - [x] Repository verification with `task check`.
-- [ ] Complete platform-specific validation, identifier validation, and all
-  specification change reasons.
-- [ ] Complete account preflight/error propagation and full privilege checks.
-- [ ] Complete safe filesystem semantics (no implicit system-directory creation,
-  symlink protection, ownership/mode verification, and log-path access checks).
-- [ ] Complete systemd version preflight, machine-readable status parsing, and
-  typed command-manager errors.
-- [ ] Complete launchd enabled/loaded/running/PID/exit-status semantics and
-  no-silent-restart reconciliation detection.
-- [ ] Expand isolated tests to every lifecycle, error, cancellation, drift, and
-  concurrency case in the delivery sequence.
+- [x] Systemd minimum-version preflight and machine-readable status parsing,
+  covered through the fake command runner.
+- [x] Launchd loaded/running/PID/exit-code status parsing and changed-loaded
+  `RestartRequired` reporting without an `Ensure`-time restart.
+- [x] Shared `errx` command and definition-file error wrapping with cause/output
+  preservation tests.
+- [x] Account-enforcement ordering: an account failure prevents a definition
+  write and retains its cause.
+- [x] Definition-path symlink rejection before replacement or removal.
+- [x] Log parent existence/directory preflight; service never creates an
+  application log directory.
+- [x] LaunchDaemon replacements explicitly apply root ownership and `0644` mode
+  through the filesystem seam.
+- [x] Unsafe temporary/build-output binaries and non-regular/non-executable
+  deployment artifacts are rejected before installation.
+- [x] Complete platform-specific validation, identifier validation, and
+  canonical specification change reasons.
+- [x] Complete account preflight/error propagation and full privilege checks.
+- [x] Complete safe filesystem semantics (no implicit system-directory creation,
+  ownership/mode verification, and log-path access checks).
+- [x] Complete expected inactive/not-loaded handling, command-manager error
+  classification, and lifecycle failure paths.
+- [x] Complete launchd disabled-state parsing and lifecycle status semantics.
+- [x] Expand isolated tests across lifecycle, error, cancellation, drift, and
+  atomic-concurrency cases in the delivery sequence.
 
 ## Purpose
 

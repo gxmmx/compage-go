@@ -4,13 +4,23 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/gxmmx/compage-go/errx"
 )
 
 type failingFiles struct {
 	fakeFiles
 	writeErr error
+}
+
+func TestCommandOutputClassifiesMissingTool(t *testing.T) {
+	_, err := commandOutput(context.Background(), &fakeRunner{err: exec.ErrNotFound}, "missing-tool")
+	if !errx.IsKind(err, errx.Unavailable) || !errors.Is(err, exec.ErrNotFound) {
+		t.Fatalf("error=%v", err)
+	}
 }
 
 func (f failingFiles) write(string, []byte, os.FileMode) error { return f.writeErr }

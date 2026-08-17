@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/gxmmx/compage-go/errx"
 )
 
 type launchdBackend struct{}
@@ -42,6 +44,7 @@ func (b launchdBackend) ensure(c context.Context, o *operation) (EnsureResult, e
 	}
 	w := []byte(plist(o))
 	old, e := readDefinition(o.files, p)
+	absent := errors.Is(e, fs.ErrNotExist)
 	changed := e != nil || string(old) != string(w)
 	if e != nil && !errors.Is(e, fs.ErrNotExist) {
 		return EnsureResult{}, e
@@ -50,8 +53,19 @@ func (b launchdBackend) ensure(c context.Context, o *operation) (EnsureResult, e
 		if e = writeDefinition(o.files, p, w, 0644); e != nil {
 			return EnsureResult{}, e
 		}
+		if o.spec.scope == System {
+			if e = setDefinitionOwner(o.files, p, 0, 0, 0o644); e != nil {
+				return EnsureResult{}, e
+			}
+			if e = verifyDefinitionMode(o.files, p, 0o644); e != nil {
+				return EnsureResult{}, e
+			}
+			if e = verifyDefinitionOwner(o.files, p, 0, 0); e != nil {
+				return EnsureResult{}, e
+			}
+		}
 	}
-	result := EnsureResult{Installed: true, Changed: changed, Reasons: reason(changed)}
+	result := EnsureResult{Installed: true, Changed: changed, Reasons: changeReasons(old, o.spec, changed, absent)}
 	if changed {
 		_, err := o.runner.run(c, "launchctl", "print", domain(o)+"/"+o.spec.name)
 		result.RestartRequired = err == nil
@@ -71,6 +85,9 @@ func (launchdBackend) start(c context.Context, o *operation) error {
 	return e
 }
 func (launchdBackend) stop(c context.Context, o *operation) error {
+	if _, err := o.files.stat(launchdPath(o)); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	d := domain(o)
 	if _, err := commandOutput(c, o.runner, "launchctl", "disable", d+"/"+o.spec.name); err != nil {
 		return err
@@ -92,6 +109,9 @@ func (b launchdBackend) uninstall(c context.Context, o *operation) error {
 }
 func (launchdBackend) status(c context.Context, o *operation) (Status, error) {
 	_, e := o.files.stat(launchdPath(o))
+	if e != nil && !errors.Is(e, fs.ErrNotExist) {
+		return Status{}, errx.New("service: inspecting definition "+launchdPath(o), errx.WithCause(e))
+	}
 	s := Status{Installed: e == nil}
 	out, x := o.runner.run(c, "launchctl", "print", domain(o)+"/"+o.spec.name)
 	s.Loaded = x == nil
@@ -115,7 +135,16 @@ func (launchdBackend) status(c context.Context, o *operation) (Status, error) {
 }
 func plist(o *operation) string {
 	var b strings.Builder
-	b.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict>\n<key>Label</key><string>")
+	b.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+	b.WriteString("<!-- compage-spec: ")
+	b.WriteString(metadataComment(o.spec))
+	b.WriteString(" -->\n")
+	if o.spec.revision != "" {
+		b.WriteString("<!-- compage-revision: ")
+		b.WriteString(xml(o.spec.revision))
+		b.WriteString(" -->\n")
+	}
+	b.WriteString("<plist version=\"1.0\"><dict>\n<key>Label</key><string>")
 	b.WriteString(xml(o.spec.name))
 	b.WriteString("</string>\n<key>ProgramArguments</key><array>\n<string>")
 	b.WriteString(xml(o.spec.binary))
@@ -125,6 +154,7 @@ func plist(o *operation) string {
 		b.WriteString(xml(a))
 		b.WriteString("</string>\n")
 	}
+	b.WriteString("</array>\n")
 	if len(o.spec.env) > 0 {
 		keys := make([]string, 0, len(o.spec.env))
 		for k := range o.spec.env {
@@ -156,7 +186,7 @@ func plist(o *operation) string {
 		b.WriteString(xml(o.spec.stderr))
 		b.WriteString("</string>\n")
 	}
-	b.WriteString("</array>\n<key>RunAtLoad</key><true/>\n</dict></plist>\n")
+	b.WriteString("<key>RunAtLoad</key><true/>\n</dict></plist>\n")
 	return b.String()
 }
 func xml(v string) string {

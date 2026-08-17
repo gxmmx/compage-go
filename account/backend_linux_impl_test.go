@@ -88,8 +88,8 @@ func TestLinuxApplyKeepsCompletedGroupAfterAccountFailure(t *testing.T) {
 		if name == "groupadd" {
 			store.groups[args[len(args)-1]] = &user.Group{Name: args[len(args)-1], Gid: "900"}
 		}
-	}, errFor: func(name string, _ []string) error {
-		if name == "useradd" {
+	}, errFor: func(name string, args []string) error {
+		if name == "useradd" && (len(args) == 0 || args[0] != "--help") {
 			return cause
 		}
 		return nil

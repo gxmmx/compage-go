@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -16,6 +17,9 @@ func TestLaunchdPlistRendersEscapedDeterministicValues(t *testing.T) {
 		if !strings.Contains(s, want) {
 			t.Errorf("missing %q in %s", want, s)
 		}
+	}
+	if strings.Index(s, "</array>") > strings.Index(s, "<key>EnvironmentVariables</key>") {
+		t.Fatalf("environment is inside ProgramArguments: %s", s)
 	}
 }
 
@@ -46,6 +50,17 @@ func TestLaunchdEnsureReportsLoadedChangeWithoutRestart(t *testing.T) {
 	}
 }
 
+func TestLaunchDaemonEnsureSetsRootOwnershipAndMode(t *testing.T) {
+	f := &fakeFiles{values: map[string][]byte{}}
+	o := operation{spec: specification{name: "com.example.x", binary: "/bin/x", scope: System}, files: f, runner: &fakeRunner{}}
+	if _, err := (launchdBackend{}).ensure(context.Background(), &o); err != nil {
+		t.Fatal(err)
+	}
+	if f.chownCalls != 1 || f.chmodCalls != 1 {
+		t.Fatalf("chown=%d chmod=%d", f.chownCalls, f.chmodCalls)
+	}
+}
+
 func TestLaunchdStatusParsesAvailableFields(t *testing.T) {
 	f := &fakeFiles{values: map[string][]byte{"/tmp/user/Library/LaunchAgents/com.example.x.plist": {}}}
 	r := &fakeRunner{outputs: map[string]string{"print": "pid = 41\nlast exit code = 2\n", "print-disabled": "{\n}\n"}}
@@ -53,5 +68,40 @@ func TestLaunchdStatusParsesAvailableFields(t *testing.T) {
 	s, err := (launchdBackend{}).status(context.Background(), &o)
 	if err != nil || !s.Installed || !s.Loaded || !s.Enabled || s.PID != 41 || s.ExitCode == nil || *s.ExitCode != 2 {
 		t.Fatalf("status=%+v err=%v", s, err)
+	}
+}
+
+func TestLaunchdStatusHandlesUnloadedAndDisabledJob(t *testing.T) {
+	f := &fakeFiles{values: map[string][]byte{"/tmp/user/Library/LaunchAgents/com.example.x.plist": {}}}
+	r := &fakeRunner{outputs: map[string]string{"print-disabled": "\"com.example.x\" => true\n"}, err: errors.New("not loaded")}
+	o := operation{spec: specification{name: "com.example.x", scope: User}, user: host.UserInfo{UID: "501", Home: "/tmp/user"}, files: f, runner: r}
+	s, err := (launchdBackend{}).status(context.Background(), &o)
+	if err != nil || !s.Installed || s.Loaded || s.Running || s.Enabled {
+		t.Fatalf("status=%+v err=%v", s, err)
+	}
+}
+
+func TestLaunchdRevisionParticipatesInRenderedDefinition(t *testing.T) {
+	o := operation{spec: specification{name: "com.example.x", binary: "/bin/x", revision: "v1", scope: System}}
+	if !strings.Contains(plist(&o), "compage-revision: v1") {
+		t.Fatal("plist revision missing")
+	}
+}
+
+func TestLaunchdStopAbsentIsIdempotent(t *testing.T) {
+	r := &fakeRunner{}
+	o := operation{spec: specification{name: "com.example.x", scope: User}, user: host.UserInfo{Home: "/tmp/user"}, files: &fakeFiles{values: map[string][]byte{}}, runner: r}
+	if err := (launchdBackend{}).stop(context.Background(), &o); err != nil || len(r.calls) != 0 {
+		t.Fatalf("err=%v calls=%v", err, r.calls)
+	}
+}
+func TestLaunchdStartAndStopPreserveCommandFailures(t *testing.T) {
+	cause := errors.New("launchctl failed")
+	o := operation{spec: specification{name: "com.example.x", scope: User}, user: host.UserInfo{UID: "501", Home: "/tmp/user"}, files: &fakeFiles{values: map[string][]byte{"/tmp/user/Library/LaunchAgents/com.example.x.plist": {}}}, runner: &fakeRunner{err: cause}}
+	if err := (launchdBackend{}).start(context.Background(), &o); !errors.Is(err, cause) {
+		t.Fatalf("start err=%v", err)
+	}
+	if err := (launchdBackend{}).stop(context.Background(), &o); !errors.Is(err, cause) {
+		t.Fatalf("stop err=%v", err)
 	}
 }

@@ -2,7 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gxmmx/compage-go/account"
@@ -19,9 +23,14 @@ const (
 type ChangeReason string
 
 const (
-	Missing         ChangeReason = "missing"
-	DefinitionDrift ChangeReason = "definition_drift"
-	AccountChanged  ChangeReason = "account_changed"
+	Missing            ChangeReason = "missing"
+	BinaryChanged      ChangeReason = "binary_changed"
+	ArgumentsChanged   ChangeReason = "arguments_changed"
+	EnvironmentChanged ChangeReason = "environment_changed"
+	LogsChanged        ChangeReason = "logs_changed"
+	RevisionChanged    ChangeReason = "revision_changed"
+	DefinitionDrift    ChangeReason = "definition_drift"
+	AccountChanged     ChangeReason = "account_changed"
 )
 
 type EnsureResult struct {
@@ -31,6 +40,79 @@ type EnsureResult struct {
 	RestartRequired bool
 	Account         *account.EnsureResult
 }
+
+type definitionMetadata struct {
+	Description string
+	Binary      string
+	Args        []string
+	Environment map[string]string
+	Account     string
+	Stdout      string
+	Stderr      string
+	Revision    string
+}
+
+func metadataFor(s specification) definitionMetadata {
+	a := ""
+	if s.account != nil {
+		a = s.account.Name
+	}
+	return definitionMetadata{Description: s.description, Binary: s.binary, Args: s.args, Environment: s.env, Account: a, Stdout: s.stdout, Stderr: s.stderr, Revision: s.revision}
+}
+func metadataComment(s specification) string {
+	raw, _ := json.Marshal(metadataFor(s))
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
+func changeReasons(old []byte, s specification, changed, missing bool) []ChangeReason {
+	if !changed {
+		return nil
+	}
+	if missing {
+		return []ChangeReason{Missing}
+	}
+	marker := "compage-spec: "
+	i := strings.Index(string(old), marker)
+	if i < 0 {
+		return []ChangeReason{DefinitionDrift}
+	}
+	value := string(old)[i+len(marker):]
+	if j := strings.IndexAny(value, "\r\n "); j >= 0 {
+		value = value[:j]
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil {
+		return []ChangeReason{DefinitionDrift}
+	}
+	var previous definitionMetadata
+	if json.Unmarshal(raw, &previous) != nil {
+		return []ChangeReason{DefinitionDrift}
+	}
+	wanted := metadataFor(s)
+	var out []ChangeReason
+	if previous.Binary != wanted.Binary {
+		out = append(out, BinaryChanged)
+	}
+	if !slices.Equal(previous.Args, wanted.Args) {
+		out = append(out, ArgumentsChanged)
+	}
+	if !maps.Equal(previous.Environment, wanted.Environment) {
+		out = append(out, EnvironmentChanged)
+	}
+	if previous.Stdout != wanted.Stdout || previous.Stderr != wanted.Stderr {
+		out = append(out, LogsChanged)
+	}
+	if previous.Account != wanted.Account {
+		out = append(out, AccountChanged)
+	}
+	if previous.Revision != wanted.Revision {
+		out = append(out, RevisionChanged)
+	}
+	if len(out) == 0 || previous.Description != wanted.Description {
+		out = append(out, DefinitionDrift)
+	}
+	return out
+}
+
 type Status struct {
 	Installed bool
 	Enabled   bool
@@ -118,8 +200,14 @@ func validate(s specification) error {
 	if s.binary == "" || !filepath.IsAbs(s.binary) || filepath.Clean(s.binary) != s.binary {
 		return &ValidationError{Message: "binary must be a clean absolute path"}
 	}
+	if strings.HasPrefix(s.binary, "/tmp/") || strings.Contains(s.binary, "/.dist/") {
+		return &ValidationError{Message: "binary must not be in a temporary or build-output path"}
+	}
 	if !validServiceName(s.name) {
 		return &ValidationError{Message: "invalid service name"}
+	}
+	if strings.ContainsAny(s.description, "\x00\r\n") || strings.ContainsAny(s.revision, "\x00\r\n") {
+		return &ValidationError{Message: "description and revision must not contain control line breaks"}
 	}
 	if s.scope == User && s.account != nil {
 		return &ValidationError{Message: "account requires system scope"}
@@ -130,8 +218,13 @@ func validate(s specification) error {
 		}
 	}
 	for k, v := range s.env {
-		if !validEnv(k) || strings.ContainsRune(v, 0) {
+		if !validEnv(k) || strings.ContainsAny(v, "\x00\r\n") {
 			return &ValidationError{Message: "invalid environment"}
+		}
+	}
+	for _, arg := range s.args {
+		if strings.ContainsAny(arg, "\x00\r\n") {
+			return &ValidationError{Message: "arguments must not contain control line breaks"}
 		}
 	}
 	return nil

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/gxmmx/compage-go/errx"
 )
@@ -29,6 +30,8 @@ type files interface {
 	write(string, []byte, os.FileMode) error
 	mkdirAll(string, os.FileMode) error
 	remove(string) error
+	chmod(string, os.FileMode) error
+	chown(string, int, int) error
 	stat(string) (os.FileInfo, error)
 	lstat(string) (os.FileInfo, error)
 }
@@ -66,6 +69,8 @@ func (osFiles) write(p string, b []byte, m os.FileMode) error {
 }
 func (osFiles) mkdirAll(p string, m os.FileMode) error { return os.MkdirAll(p, m) }
 func (osFiles) remove(p string) error                  { return os.Remove(p) }
+func (osFiles) chmod(p string, m os.FileMode) error    { return os.Chmod(p, m) }
+func (osFiles) chown(p string, u, g int) error         { return os.Chown(p, u, g) }
 func (osFiles) stat(p string) (os.FileInfo, error)     { return os.Stat(p) }
 func (osFiles) lstat(p string) (os.FileInfo, error)    { return os.Lstat(p) }
 
@@ -101,7 +106,11 @@ func commandOutput(ctx context.Context, r runner, name string, args ...string) (
 	if detail := strings.TrimSpace(out); detail != "" {
 		message += ": " + detail
 	}
-	return "", errx.New(message, errx.WithCause(err))
+	wrapped := errx.New(message, errx.WithCause(err))
+	if errors.Is(err, exec.ErrNotFound) {
+		return "", &UnsupportedError{Capability: name, Cause: wrapped}
+	}
+	return "", wrapped
 }
 
 func readDefinition(files files, path string) ([]byte, error) {
@@ -120,6 +129,45 @@ func writeDefinition(files files, path string, data []byte, mode os.FileMode) er
 func removeDefinition(files files, path string) error {
 	if err := files.remove(path); err != nil {
 		return errx.New("service: removing definition "+path, errx.WithCause(err))
+	}
+	return nil
+}
+func setDefinitionOwner(files files, path string, uid, gid int, mode os.FileMode) error {
+	if err := files.chown(path, uid, gid); err != nil {
+		return errx.New("service: owning definition "+path, errx.WithCause(err))
+	}
+	if err := files.chmod(path, mode); err != nil {
+		return errx.New("service: setting definition mode "+path, errx.WithCause(err))
+	}
+	return nil
+}
+func verifyDefinitionMode(files files, path string, mode os.FileMode) error {
+	info, err := files.stat(path)
+	if err != nil {
+		return errx.New("service: verifying definition "+path, errx.WithCause(err))
+	}
+	if info == nil {
+		return errx.New("service: verifying definition " + path + ": empty file information")
+	}
+	if info.Mode().Perm() != mode.Perm() {
+		return &ValidationError{Message: "definition has unexpected mode"}
+	}
+	return nil
+}
+func verifyDefinitionOwner(files files, path string, uid, gid int) error {
+	info, err := files.stat(path)
+	if err != nil {
+		return errx.New("service: verifying definition owner "+path, errx.WithCause(err))
+	}
+	if info == nil {
+		return errx.New("service: verifying definition owner " + path + ": empty file information")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat == nil {
+		return errx.New("service: unsupported definition ownership metadata")
+	}
+	if int(stat.Uid) != uid || int(stat.Gid) != gid {
+		return &ValidationError{Message: "definition has unexpected ownership"}
 	}
 	return nil
 }
