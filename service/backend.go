@@ -1,0 +1,68 @@
+package service
+
+import (
+	"context"
+	"github.com/gxmmx/compage-go/account"
+	"github.com/gxmmx/compage-go/host"
+	"os"
+	"os/exec"
+	"path/filepath"
+)
+
+type runner interface {
+	run(context.Context, string, ...string) (string, error)
+}
+type execRunner struct{}
+
+func (execRunner) run(c context.Context, n string, a ...string) (string, error) {
+	o, e := exec.CommandContext(c, n, a...).CombinedOutput()
+	return string(o), e
+}
+
+type files interface {
+	read(string) ([]byte, error)
+	write(string, []byte, os.FileMode) error
+	remove(string) error
+	stat(string) (os.FileInfo, error)
+}
+type osFiles struct{}
+
+func (osFiles) read(p string) ([]byte, error) { return os.ReadFile(p) }
+func (osFiles) write(p string, b []byte, m os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(p, b, m)
+}
+func (osFiles) remove(p string) error              { return os.Remove(p) }
+func (osFiles) stat(p string) (os.FileInfo, error) { return os.Stat(p) }
+
+type backend interface {
+	validate(specification) error
+	ensure(context.Context, *operation) (EnsureResult, error)
+	start(context.Context, *operation) error
+	stop(context.Context, *operation) error
+	uninstall(context.Context, *operation) error
+	status(context.Context, *operation) (Status, error)
+}
+type operation struct {
+	spec          specification
+	platform      host.PlatformInfo
+	user          host.UserInfo
+	root          bool
+	backend       backend
+	runner        runner
+	files         files
+	ensureAccount func(context.Context, account.Spec) (account.EnsureResult, error)
+}
+
+func platformBackend(o host.OS) (backend, error) {
+	switch o {
+	case host.Linux:
+		return systemdBackend{}, nil
+	case host.Darwin:
+		return launchdBackend{}, nil
+	default:
+		return nil, &UnsupportedError{Capability: string(o)}
+	}
+}
