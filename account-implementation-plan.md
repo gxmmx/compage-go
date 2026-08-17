@@ -183,6 +183,14 @@ through environment variables or filesystem-only changes.
 
 ## Error model
 
+`account` uses the repository's `errx` package for semantic classification.
+Every exported domain error implements `errx.Classified`, returns the stated
+`errx.Kind`, and retains its underlying OS, filesystem, directory-service, or
+command cause through `Unwrap`. Callers can use `errors.As` for account-specific
+context and `errx.IsKind` for broad, transport-neutral handling. Do not replace
+these errors with unclassified formatted strings, and do not classify errors in
+the `host` package on its behalf.
+
 Provide typed errors that retain their underlying OS/command cause:
 
 ```go
@@ -192,18 +200,27 @@ type DriftError struct { /* expected and observed fields */ }
 type UnsupportedError struct { /* platform or account capability */ }
 ```
 
+Their classifications are: `NotFoundError` → `errx.NotFound`,
+`PrivilegeError` → `errx.Forbidden`, `DriftError` → `errx.Conflict`, and
+`UnsupportedError` → `errx.Unavailable`. Invalid account specifications,
+paths, and policy combinations use a typed validation error classified as
+`errx.Validation`. Command output belongs in contextual errors for operability,
+but sensitive values must not be included.
+
 All errors wrap their underlying cause so callers can use `errors.Is` and
-`errors.As`. Command output belongs in contextual errors for operability.
+`errors.As`.
 
 ## Test strategy
 
 - Unit-test specification validation, policy comparison, path validation,
-  privilege preflight, and result generation without touching host accounts.
+  privilege preflight, typed-error classification, and result generation without
+  touching host accounts.
 - Use injected account-store, command-runner, filesystem, and host-query seams
-  for backend mutation tests.
-- Run real integration tests only in disposable Linux/macOS environments with
-  dedicated temporary accounts and directories.
-- Never run account-mutating tests against a developer workstation by default.
+  for every lookup and backend-mutation test.
+- The repository test suite must never create, modify, or delete a real account,
+  group, home directory, or account-owned filesystem object. Do not add live
+  integration tests, even behind build tags, unless this policy is explicitly
+  changed in a future plan revision.
 - Cover idempotency, missing accounts, drift, no-home accounts, nonstandard
   homes, group changes, insufficient privilege, and partial command failures.
 

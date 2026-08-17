@@ -237,6 +237,24 @@ Introduce audited, opt-in hardening profiles later.
 - Support `linux` and `darwin` initially; return a typed unsupported-platform
   error elsewhere.
 
+## Error handling
+
+`service` uses the repository's `errx` package for semantic classification.
+Every exported domain error implements `errx.Classified` and wraps its original
+filesystem, account-lookup, OS, or command cause where one exists. Callers use
+`errors.As` for service-specific context and `errx.IsKind` for broad handling;
+the package must not discard command output or causes in formatted strings.
+
+Use these classifications consistently: invalid manager options and invalid
+service specifications are `errx.Validation`; missing runtime accounts and
+absent managed definitions are `errx.NotFound` when surfaced as errors;
+system-scope privilege preflight failures are `errx.Forbidden`; unavailable
+systemd/launchd managers and unsupported platforms are `errx.Unavailable`;
+and unexpected command, rendering, or filesystem failures are contextual,
+unclassified errors unless the operation can establish a more precise kind.
+Do not classify lower-level `host` lookup errors inside `host`; `service` may
+wrap and classify them only when its operation establishes their meaning.
+
 ## Package structure
 
 ```text

@@ -79,6 +79,15 @@ performs the operation.
 error when the executable cannot be resolved. `WorkingDir` returns the process
 working directory without reading any unrelated host/process details.
 
+## Error handling
+
+`host` has no domain-level failure taxonomy. Its fallible functions return an
+unclassified `errx.Error` that wraps the original standard-library/OS cause.
+Its `Kind()` is therefore `errx.Unknown`: failing to resolve the current
+executable, working directory, or effective user is not enough information to
+assign a transport-neutral semantic meaning. Callers that own a higher-level
+operation may add a precise `errx` classification at their own boundary.
+
 ## Boundaries
 
 `host` answers only facts about the currently executing process:
