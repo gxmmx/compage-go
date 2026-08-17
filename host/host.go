@@ -25,6 +25,7 @@ type UserInfo struct {
 	UID    string
 	GID    string
 	Name   string
+	Home   string
 	IsRoot bool
 }
 

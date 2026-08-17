@@ -28,11 +28,11 @@ func TestIsRoot(t *testing.T) {
 
 func TestCurrentUser(t *testing.T) {
 	t.Parallel()
-	got, err := currentUser(fakeSystem{uid: 123, user: &user.User{Uid: "123", Gid: "456", Username: "worker"}}, "linux")
+	got, err := currentUser(fakeSystem{uid: 123, user: &user.User{Uid: "123", Gid: "456", Username: "worker", HomeDir: "/home/worker"}}, "linux")
 	if err != nil {
 		t.Fatalf("currentUser() error = %v", err)
 	}
-	if want := (UserInfo{UID: "123", GID: "456", Name: "worker"}); got != want {
+	if want := (UserInfo{UID: "123", GID: "456", Name: "worker", Home: "/home/worker"}); got != want {
 		t.Errorf("currentUser() = %#v, want %#v", got, want)
 	}
 }

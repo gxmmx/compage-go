@@ -62,6 +62,7 @@ func currentUser(query systemQuery, goos string) (UserInfo, error) {
 		UID:    uid,
 		GID:    record.Gid,
 		Name:   record.Username,
+		Home:   record.HomeDir,
 		IsRoot: isRoot(goos, query.effectiveUID()),
 	}, nil
 }
