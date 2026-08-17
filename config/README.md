@@ -34,8 +34,11 @@ form dotted namespaces, while anonymous embedded structs are flattened.
 
 Supported leaf types are `string`, `bool`, `int`, `int64`, `uint`, `uint64`,
 `float64`, `time.Duration`, and `[]string`. Named aliases are not supported (except
-`time.Duration` itself). Values for `[]string` use a JSON string array, such as
-`["one","two"]`.
+`time.Duration` itself). Text values for `[]string` use the CSV syntax accepted by
+pflag `StringSlice`, such as `one,two`. Quote a value containing a comma
+(`"one,two",three`) and double a quote within a quoted value
+(`"say ""hello""",three`). This applies to defaults, environment variables, and
+flags; for example, `default:"one,two"` and `MYAPP_TAGS=one,two`.
 
 | Tag | Meaning |
 | --- | --- |

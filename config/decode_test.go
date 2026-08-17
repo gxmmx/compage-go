@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"math"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -17,7 +18,7 @@ func TestConversionContract(t *testing.T) {
 		Uint64   uint64        `default:"4"`
 		Float    float64       `default:"1.5"`
 		Duration time.Duration `default:"2s"`
-		Tags     []string      `default:"[\"a\",\"b\"]"`
+		Tags     []string      `default:"a,b"`
 	}
 	c, err := Load[Config]()
 	if err != nil {
@@ -33,6 +34,52 @@ func TestConversionContract(t *testing.T) {
 	var defaultError *DefaultValueError
 	if !errors.As(err, &defaultError) {
 		t.Fatalf("default error = %T", err)
+	}
+}
+
+func TestStringSliceTextConversion(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{name: "plain", input: "one,two", want: []string{"one", "two"}},
+		{name: "quoted comma", input: `"one,two",three`, want: []string{"one,two", "three"}},
+		{name: "escaped quote", input: `"say ""hello""",three`, want: []string{`say "hello"`, "three"}},
+		{name: "empty", input: "", want: []string{}},
+		{name: "pflag", input: "[one,two]", want: []string{"one", "two"}},
+		{name: "pflag quoted comma", input: `["one,two",three]`, want: []string{"one,two", "three"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := coerce(test.input, reflect.TypeFor[[]string]())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got.Interface(), test.want) {
+				t.Fatalf("coerce(%q) = %#v, want %#v", test.input, got.Interface(), test.want)
+			}
+		})
+	}
+	for _, input := range []string{`"unterminated`, "one\ntwo", `["one", "two"]`} {
+		if _, err := coerce(input, reflect.TypeFor[[]string]()); err == nil {
+			t.Errorf("coerce(%q) succeeded", input)
+		}
+	}
+}
+
+func TestStringSliceEnvironmentValue(t *testing.T) {
+	t.Setenv("TEST_CONFIG_TAGS", `"one,two",three`)
+	c, err := Load[struct {
+		Tags []string `env:"TEST_CONFIG_TAGS" default:"default"`
+	}]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := c.Values().Tags, []string{"one,two", "three"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Tags = %#v, want %#v", got, want)
+	}
+	if source, ok := c.Source("tags"); !ok || source != SourceEnv {
+		t.Fatalf("Source(tags) = %v, %v", source, ok)
 	}
 }
 

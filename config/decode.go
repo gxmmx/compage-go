@@ -1,11 +1,14 @@
 package config
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -51,8 +54,8 @@ func coerce(raw any, t reflect.Type) (reflect.Value, error) {
 		}
 	}
 	if t == reflect.TypeFor[[]string]() {
-		var a []string
-		if err := json.Unmarshal([]byte(s), &a); err != nil {
+		a, err := parseStringSlice(s)
+		if err != nil {
 			return reflect.Value{}, err
 		}
 		return reflect.ValueOf(a), nil
@@ -87,6 +90,29 @@ func coerce(raw any, t reflect.Type) (reflect.Value, error) {
 		v.SetFloat(x)
 	}
 	return v, err
+}
+
+// parseStringSlice parses textual string slices using pflag-compatible CSV
+// syntax. Its optional outer brackets consume pflag Value.String output.
+func parseStringSlice(text string) ([]string, error) {
+	if len(text) >= 2 && text[0] == '[' && text[len(text)-1] == ']' {
+		text = text[1 : len(text)-1]
+	}
+	if text == "" {
+		return []string{}, nil
+	}
+	reader := csv.NewReader(strings.NewReader(text))
+	values, err := reader.Read()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := reader.Read(); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("multiple CSV records")
+		}
+		return nil, err
+	}
+	return values, nil
 }
 
 func finite(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }

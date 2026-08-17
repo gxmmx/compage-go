@@ -4,7 +4,7 @@ type testConfig struct {
 	Port  int      `default:"8080" env:"TEST_CONFIG_PORT" flag:"port" save:"true"`
 	Name  string   `default:"agent" save:"true"`
 	Token string   `env:"TEST_CONFIG_TOKEN" sensitive:"true" save:"true"`
-	Tags  []string `default:"[\"a\"]" save:"true"`
+	Tags  []string `default:"a" save:"true"`
 }
 
 type testFlags map[string]struct {

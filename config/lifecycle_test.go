@@ -37,7 +37,7 @@ func TestLifecycleAndRequiredPresence(t *testing.T) {
 func TestConcurrentReadAndMutation(t *testing.T) {
 	c, err := Load[struct {
 		Value int      `default:"1"`
-		Tags  []string `default:"[\"x\"]"`
+		Tags  []string `default:"x"`
 	}]()
 	if err != nil {
 		t.Fatal(err)

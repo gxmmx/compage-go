@@ -5,7 +5,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// Source exposes a pflag FlagSet without making config depend on pflag.
+// Source exposes a pflag FlagSet without making config depend on pflag. Its
+// StringSlice values use pflag's string representation, which config decodes.
 type Source struct{ Flags *pflag.FlagSet }
 
 // Lookup implements config.FlagSource.

@@ -15,4 +15,5 @@ _ = cfg
 ```
 
 Only flags explicitly changed by the caller win over lower-priority config
-sources.
+sources. `pflag.StringSlice` flags are supported; config decodes pflag's
+comma-separated string-slice representation.
