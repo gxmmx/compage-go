@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -31,6 +32,11 @@ func domain(o *operation) string {
 }
 func (b launchdBackend) ensure(c context.Context, o *operation) (EnsureResult, error) {
 	p := launchdPath(o)
+	if o.spec.scope == User {
+		if err := o.files.mkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return EnsureResult{}, err
+		}
+	}
 	w := []byte(plist(o))
 	old, e := o.files.read(p)
 	changed := e != nil || string(old) != string(w)
@@ -42,7 +48,12 @@ func (b launchdBackend) ensure(c context.Context, o *operation) (EnsureResult, e
 			return EnsureResult{}, e
 		}
 	}
-	return EnsureResult{Installed: true, Changed: changed, Reasons: reason(changed)}, nil
+	result := EnsureResult{Installed: true, Changed: changed, Reasons: reason(changed)}
+	if changed {
+		_, err := o.runner.run(c, "launchctl", "print", domain(o)+"/"+o.spec.name)
+		result.RestartRequired = err == nil
+	}
+	return result, nil
 }
 func (launchdBackend) start(c context.Context, o *operation) error {
 	d := domain(o)
@@ -73,10 +84,21 @@ func (launchdBackend) status(c context.Context, o *operation) (Status, error) {
 	s := Status{Installed: e == nil}
 	out, x := o.runner.run(c, "launchctl", "print", domain(o)+"/"+o.spec.name)
 	s.Loaded = x == nil
-	s.Running = s.Loaded
 	s.Detail = strings.TrimSpace(out)
-	if x != nil {
-		return s, nil
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "pid =") {
+			s.PID, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "pid =")))
+		}
+		if strings.HasPrefix(line, "last exit code =") {
+			if code, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "last exit code ="))); err == nil {
+				s.ExitCode = &code
+			}
+		}
+	}
+	s.Running = s.PID > 0
+	if disabled, err := o.runner.run(c, "launchctl", "print-disabled", domain(o)); err == nil {
+		s.Enabled = !strings.Contains(disabled, `"`+o.spec.name+`" => true`)
 	}
 	return s, nil
 }

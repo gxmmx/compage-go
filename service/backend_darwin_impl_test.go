@@ -30,3 +30,28 @@ func TestLaunchdStartUsesOnlyRunner(t *testing.T) {
 		t.Fatalf("bootstrap=%q", got)
 	}
 }
+
+func TestLaunchdEnsureReportsLoadedChangeWithoutRestart(t *testing.T) {
+	f := &fakeFiles{values: map[string][]byte{}}
+	r := &fakeRunner{}
+	o := operation{spec: specification{name: "com.example.x", binary: "/bin/x", scope: User}, user: host.UserInfo{UID: "501", Home: "/tmp/user"}, files: f, runner: r}
+	result, err := (launchdBackend{}).ensure(context.Background(), &o)
+	if err != nil || !result.RestartRequired {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	for _, call := range r.calls {
+		if len(call) > 1 && call[1] == "bootout" {
+			t.Fatalf("Ensure restarted job: %v", r.calls)
+		}
+	}
+}
+
+func TestLaunchdStatusParsesAvailableFields(t *testing.T) {
+	f := &fakeFiles{values: map[string][]byte{"/tmp/user/Library/LaunchAgents/com.example.x.plist": {}}}
+	r := &fakeRunner{outputs: map[string]string{"print": "pid = 41\nlast exit code = 2\n", "print-disabled": "{\n}\n"}}
+	o := operation{spec: specification{name: "com.example.x", scope: User}, user: host.UserInfo{UID: "501", Home: "/tmp/user"}, files: f, runner: r}
+	s, err := (launchdBackend{}).status(context.Background(), &o)
+	if err != nil || !s.Installed || !s.Loaded || !s.Enabled || s.PID != 41 || s.ExitCode == nil || *s.ExitCode != 2 {
+		t.Fatalf("status=%+v err=%v", s, err)
+	}
+}

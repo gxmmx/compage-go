@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"github.com/gxmmx/compage-go/account"
 	"testing"
 )
 
@@ -14,6 +15,23 @@ func TestValidateRejectsUnsafeNamesAndEnvironment(t *testing.T) {
 	}
 	if err := validate(specification{name: "x", binary: "/bin/x", scope: User, env: map[string]string{"A-B": "x"}}); err == nil {
 		t.Fatal("invalid environment accepted")
+	}
+}
+
+func TestEnsureAccountFailurePreventsDefinitionWrite(t *testing.T) {
+	cause := errors.New("account failed")
+	f := &fakeFiles{values: map[string][]byte{"/bin/x": {}}}
+	called := false
+	o := operation{spec: specification{name: "x", binary: "/bin/x", scope: System, account: &account.Spec{Name: "worker"}}, backend: systemdBackend{}, files: f, runner: &fakeRunner{outputs: map[string]string{"--version": "systemd 260\n"}}, ensureAccount: func(context.Context, account.Spec) (account.EnsureResult, error) {
+		called = true
+		return account.EnsureResult{}, cause
+	}}
+	_, err := o.ensure(context.Background())
+	if !called || !errors.Is(err, cause) {
+		t.Fatalf("called=%v err=%v", called, err)
+	}
+	if _, exists := f.values[systemdPath(&o)]; exists {
+		t.Fatal("definition written after account failure")
 	}
 }
 

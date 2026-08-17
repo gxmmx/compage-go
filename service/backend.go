@@ -22,6 +22,7 @@ func (execRunner) run(c context.Context, n string, a ...string) (string, error) 
 type files interface {
 	read(string) ([]byte, error)
 	write(string, []byte, os.FileMode) error
+	mkdirAll(string, os.FileMode) error
 	remove(string) error
 	stat(string) (os.FileInfo, error)
 }
@@ -29,9 +30,6 @@ type osFiles struct{}
 
 func (osFiles) read(p string) ([]byte, error) { return os.ReadFile(p) }
 func (osFiles) write(p string, b []byte, m os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
-		return err
-	}
 	tmp, err := os.CreateTemp(filepath.Dir(p), ".service-*")
 	if err != nil {
 		return err
@@ -60,8 +58,9 @@ func (osFiles) write(p string, b []byte, m os.FileMode) error {
 	defer dir.Close()
 	return dir.Sync()
 }
-func (osFiles) remove(p string) error              { return os.Remove(p) }
-func (osFiles) stat(p string) (os.FileInfo, error) { return os.Stat(p) }
+func (osFiles) mkdirAll(p string, m os.FileMode) error { return os.MkdirAll(p, m) }
+func (osFiles) remove(p string) error                  { return os.Remove(p) }
+func (osFiles) stat(p string) (os.FileInfo, error)     { return os.Stat(p) }
 
 type backend interface {
 	validate(specification) error
