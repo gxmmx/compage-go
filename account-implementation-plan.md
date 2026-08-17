@@ -271,12 +271,39 @@ All errors wrap their underlying cause so callers can use `errors.Is` and
   generation without touching host accounts.
 - Use injected account-store, command-runner, filesystem, and host-query seams
   for every lookup and backend-mutation test.
+- Tests must never instantiate production dependencies (`productionDeps`,
+  `execRunner`, `osStore`, or `osFS`) and must never call a real account,
+  directory-service, group-management, ownership, or filesystem mutation API.
+  In particular, tests must not execute `useradd`, `usermod`, `groupadd`,
+  `groupmod`, `getent`, `dscl`, `dseditgroup`, `stat`, `chown`, or `chmod`.
+  Command tests use a fake runner that records command arguments and returns
+  caller-supplied output or failure. Filesystem tests use a fake filesystem.
+- The Linux and macOS backends are tested through their fake seams on any host.
+  Cross-compilation is not a behavioral test and is not part of this package's
+  verification strategy. Native live-mutation tests are prohibited.
 - The repository test suite must never create, modify, or delete a real account,
   group, home directory, or account-owned filesystem object. Do not add live
   integration tests, even behind build tags, unless this policy is explicitly
   changed in a future plan revision.
 - Cover idempotency, missing accounts, drift, no-home accounts, nonstandard
   homes, group changes, insufficient privilege, and partial command failures.
+
+### Backend acceptance matrix
+
+Before declaring either mutation backend production-ready, add fake-backed
+tests for every row below. A passing command exit status is insufficient: tests
+must also model and assert the required postcondition lookup or filesystem
+inspection.
+
+| Area | Linux backend | macOS backend |
+| --- | --- | --- |
+| Lookup | Parse a valid `getent passwd` record; reject malformed records; resolve primary and supplementary groups through the store. | Parse `dscl -read` attributes; reject missing or malformed attributes; resolve primary and supplementary groups through the store. |
+| Capability preflight | Record and validate required `useradd`, `usermod`, `groupadd`, and `groupmod` capabilities without mutation. | Record `dscl` and `dseditgroup` preflight calls without mutation. |
+| Account creation | Render every declared field, disable implicit home creation, and verify the created record. | Render local Directory Service attributes, allocate requested/automatic IDs safely, and verify the created record. |
+| Primary group | Create a missing group, reconcile an explicit GID, preserve completed changes on a later failure, and verify the group. | Create/reconcile a local group and GID through Directory Service, preserve completed changes on a later failure, and verify the group. |
+| Supplementary groups | Reconcile the exact declared set and verify membership after mutation. | Add missing and remove obsolete memberships in deterministic order, then verify membership. |
+| Home directory | Require an existing parent; reject a non-directory target before ownership/mode mutation; create only the target; verify mode and ownership. | Apply the identical filesystem safety policy and verify mode and ownership. |
+| Failure and cancellation | At every command/filesystem boundary, return the cause, preserve cancellation, stop later mutations, and report only completed changes. | The same guarantees for every Directory Service and filesystem boundary. |
 
 ## Delivery sequence
 

@@ -12,7 +12,7 @@ import (
 func TestCheckPlansCreationWithoutMutation(t *testing.T) {
 	t.Parallel()
 	b := &fakeBackend{lookupErr: &NotFoundError{Key: "worker"}}
-	got, err := testOperation(b, true).run(context.Background(), Spec{Name: "worker", Existing: Reconcile}, false)
+	got, err := testOperation(b, true).run(context.Background(), Spec{Name: "worker", Group: "worker", Existing: Reconcile}, false)
 	if err != nil || !got.Created || b.applies != 0 {
 		t.Fatalf("Check = %#v, %v; applies = %d", got, err, b.applies)
 	}
@@ -24,6 +24,15 @@ func TestCheckReportsDriftWithoutMutation(t *testing.T) {
 	var drift *DriftError
 	if !errors.As(err, &drift) || !errx.IsKind(err, errx.Conflict) || b.applies != 0 {
 		t.Fatalf("Check error = %v, applies = %d", err, b.applies)
+	}
+}
+func TestCheckPerformsNonMutatingBackendPreflight(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("capability unavailable")
+	b := &fakeBackend{record: Record{Name: "worker"}, preflightErr: cause}
+	_, err := testOperation(b, true).run(context.Background(), Spec{Name: "worker", Existing: Reconcile}, false)
+	if !errors.Is(err, cause) || b.preflights != 1 || b.applies != 0 {
+		t.Fatalf("Check error = %v, preflights = %d, applies = %d", err, b.preflights, b.applies)
 	}
 }
 func TestEnsureAppliesAndReturnsObservedAccount(t *testing.T) {
@@ -49,9 +58,21 @@ func TestRequireHomeAndCancellation(t *testing.T) {
 		t.Fatalf("Ensure cancellation = %v", err)
 	}
 }
+func TestEnsureReturnsOnlyCompletedChangesAfterPartialFailure(t *testing.T) {
+	t.Parallel()
+	b := &fakeBackend{
+		lookupErr: &NotFoundError{Key: "worker"},
+		completed: []Change{{Field: "group", Before: "absent", After: "worker"}},
+		applyErr:  errors.New("user creation failed"),
+	}
+	got, err := testOperation(b, true).run(context.Background(), Spec{Name: "worker", Group: "worker", Existing: Reconcile}, true)
+	if !errors.Is(err, b.applyErr) || len(got.Changed) != 1 || got.Changed[0].Field != "group" {
+		t.Fatalf("Ensure = %#v, %v; want completed group mutation and cause", got, err)
+	}
+}
 func TestValidate(t *testing.T) {
 	t.Parallel()
-	for _, s := range []Spec{{Name: ""}, {Name: "bad name"}, {Name: "worker", HomePolicy: EnsureHome, Home: "relative"}, {Name: "worker", UID: intPtr(-1)}} {
+	for _, s := range []Spec{{Name: ""}, {Name: "bad name"}, {Name: "-option"}, {Name: "worker", Groups: []string{"-option"}}, {Name: "worker", HomePolicy: EnsureHome, Home: "relative"}, {Name: "worker", UID: intPtr(-1)}} {
 		if err := validate(s); err == nil {
 			t.Errorf("validate(%#v) succeeded", s)
 		}
@@ -67,6 +88,10 @@ type fakeBackend struct {
 	lookupErr        error
 	lookups, applies int
 	homePresent      bool
+	completed        []Change
+	applyErr         error
+	preflights       int
+	preflightErr     error
 }
 
 func (f *fakeBackend) lookup(context.Context, string, bool) (Record, error) {
@@ -80,4 +105,11 @@ func (f *fakeBackend) lookup(context.Context, string, bool) (Record, error) {
 	return f.record, nil
 }
 func (f *fakeBackend) homeExists(context.Context, string) (bool, error) { return f.homePresent, nil }
-func (f *fakeBackend) apply(context.Context, Spec, *Record) error       { f.applies++; return nil }
+func (f *fakeBackend) preflight(context.Context, Spec, bool) error {
+	f.preflights++
+	return f.preflightErr
+}
+func (f *fakeBackend) apply(context.Context, Spec, *Record) ([]Change, error) {
+	f.applies++
+	return f.completed, f.applyErr
+}

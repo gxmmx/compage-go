@@ -27,6 +27,8 @@ type HomePolicy uint8
 const (
 	LeaveHomeUnchanged HomePolicy = iota
 	RequireHome
+	// EnsureHome creates only the declared home directory. Its parent directory
+	// must already exist; account never creates a parent path implicitly.
 	EnsureHome
 )
 
@@ -37,7 +39,9 @@ const (
 	Reconcile
 )
 
-// Spec declares the complete account policy managed by Ensure.
+// Spec declares the account policy managed by Ensure. Kind controls account
+// creation only: Unix does not expose a portable, stable system-account marker
+// for an existing record, so Ensure never changes an existing account's kind.
 type Spec struct {
 	Name       string
 	Kind       Kind

@@ -15,7 +15,10 @@ import (
 type backend interface {
 	lookup(context.Context, string, bool) (Record, error)
 	homeExists(context.Context, string) (bool, error)
-	apply(context.Context, Spec, *Record) error
+	preflight(context.Context, Spec, bool) error
+	// apply returns only mutations that completed.  This makes a failed Ensure
+	// useful to callers without pretending account changes are transactional.
+	apply(context.Context, Spec, *Record) ([]Change, error)
 }
 type dependencies struct {
 	platform host.PlatformInfo
@@ -52,6 +55,12 @@ func (o operation) run(ctx context.Context, spec Spec, apply bool) (EnsureResult
 		if !errors.As(err, &missing) {
 			return EnsureResult{}, err
 		}
+		if spec.Group == "" {
+			return EnsureResult{}, &ValidationError{Message: "creating an account requires an explicit primary group"}
+		}
+		if err := o.deps.backend.preflight(ctx, spec, false); err != nil {
+			return EnsureResult{}, err
+		}
 		result := EnsureResult{Created: true, Changed: creationChanges(spec)}
 		if !o.deps.root {
 			return result, &PrivilegeError{Capability: "create local account"}
@@ -62,7 +71,9 @@ func (o operation) run(ctx context.Context, spec Spec, apply bool) (EnsureResult
 		if err := ctx.Err(); err != nil {
 			return result, errx.New("account: create cancelled", errx.WithCause(err))
 		}
-		if err := o.deps.backend.apply(ctx, spec, nil); err != nil {
+		completed, err := o.deps.backend.apply(ctx, spec, nil)
+		result.Changed = completed
+		if err != nil {
 			return result, err
 		}
 		created, err := o.deps.backend.lookup(ctx, spec.Name, false)
@@ -76,6 +87,9 @@ func (o operation) run(ctx context.Context, spec Spec, apply bool) (EnsureResult
 		return result, nil
 	}
 	changes := compare(spec, record)
+	if err := o.deps.backend.preflight(ctx, spec, true); err != nil {
+		return EnsureResult{}, err
+	}
 	if spec.HomePolicy != LeaveHomeUnchanged {
 		exists, homeErr := o.deps.backend.homeExists(ctx, spec.Home)
 		if homeErr != nil {
@@ -101,7 +115,9 @@ func (o operation) run(ctx context.Context, spec Spec, apply bool) (EnsureResult
 	if err := ctx.Err(); err != nil {
 		return result, errx.New("account: reconcile cancelled", errx.WithCause(err))
 	}
-	if err := o.deps.backend.apply(ctx, spec, &record); err != nil {
+	completed, err := o.deps.backend.apply(ctx, spec, &record)
+	result.Changed = completed
+	if err != nil {
 		return result, err
 	}
 	updated, err := o.deps.backend.lookup(ctx, spec.Name, false)
@@ -111,6 +127,15 @@ func (o operation) run(ctx context.Context, spec Spec, apply bool) (EnsureResult
 	result.Account = updated
 	if remaining := compare(spec, updated); len(remaining) > 0 {
 		return result, &DriftError{Changes: remaining}
+	}
+	if spec.HomePolicy == EnsureHome {
+		exists, err := o.deps.backend.homeExists(ctx, spec.Home)
+		if err != nil {
+			return result, err
+		}
+		if !exists {
+			return result, &DriftError{Changes: []Change{{Field: "home directory", Before: "absent", After: "present"}}}
+		}
 	}
 	return result, nil
 }
@@ -138,7 +163,7 @@ func creationChanges(s Spec) []Change {
 	return changes
 }
 func validate(s Spec) error {
-	if s.Name == "" || strings.ContainsAny(s.Name, ":/\\\x00 \t\n") {
+	if !validLocalName(s.Name) {
 		return &ValidationError{Message: "name must be a simple local account name"}
 	}
 	if s.Kind != System && s.Kind != Regular {
@@ -161,7 +186,7 @@ func validate(s Spec) error {
 	}
 	seenGroups := make(map[string]struct{}, len(s.Groups))
 	for _, group := range s.Groups {
-		if group == "" || strings.ContainsAny(group, ":/\\\x00 \t\n") {
+		if !validLocalName(group) {
 			return &ValidationError{Message: "supplementary group must be a simple local group name"}
 		}
 		if _, duplicate := seenGroups[group]; duplicate {
@@ -176,6 +201,10 @@ func validate(s Spec) error {
 		return &ValidationError{Message: "home mode may contain permissions only"}
 	}
 	return nil
+}
+
+func validLocalName(value string) bool {
+	return value != "" && !strings.HasPrefix(value, "-") && !strings.ContainsAny(value, ":/\\\x00 \t\n")
 }
 func compare(s Spec, r Record) []Change {
 	var out []Change
