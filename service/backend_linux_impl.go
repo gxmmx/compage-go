@@ -12,7 +12,7 @@ import (
 	"github.com/gxmmx/compage-go/errx"
 )
 
-const minimumSystemdVersion = 260
+const minimumSystemdVersion = 257
 
 type systemdBackend struct{}
 

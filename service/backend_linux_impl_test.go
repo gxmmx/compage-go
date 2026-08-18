@@ -154,7 +154,7 @@ func TestSystemdVersionAndStatus(t *testing.T) {
 	}
 }
 func TestSystemdRejectsOldVersion(t *testing.T) {
-	o := operation{runner: &fakeRunner{outputs: map[string]string{"--version": "systemd 259\n"}}}
+	o := operation{runner: &fakeRunner{outputs: map[string]string{"--version": "systemd 256\n"}}}
 	if err := checkSystemdVersion(context.Background(), &o); err == nil {
 		t.Fatal("old systemd accepted")
 	}
