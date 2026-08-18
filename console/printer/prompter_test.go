@@ -2,18 +2,31 @@ package printer
 
 import (
 	"bytes"
+	"io"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/gxmmx/compage-go/errx"
 )
+
+func testPrompter(t *testing.T, out *bytes.Buffer, input string) Prompter {
+	t.Helper()
+	pr, err := NewPrompter(
+		withWriters(out, out),
+		WithColor(false),
+		withReader(strings.NewReader(input)),
+		withTerminalCheck(func(io.Reader) bool { return true }),
+	)
+	if err != nil {
+		t.Fatalf("NewPrompter() error = %v", err)
+	}
+	return pr
+}
 
 func TestPrompter_Prompt_ReturnsInput(t *testing.T) {
 	var out bytes.Buffer
-	input := strings.NewReader("custom value\n")
-	pr := NewPrompter(
-		withWriters(&out, &out),
-		WithColor(false),
-		withReader(input),
-	)
+	pr := testPrompter(t, &out, "custom value\n")
 
 	result := pr.Prompt("Enter name", "default")
 
@@ -30,12 +43,7 @@ func TestPrompter_Prompt_ReturnsInput(t *testing.T) {
 
 func TestPrompter_Prompt_EmptyInput_ReturnsFallback(t *testing.T) {
 	var out bytes.Buffer
-	input := strings.NewReader("\n")
-	pr := NewPrompter(
-		withWriters(&out, &out),
-		WithColor(false),
-		withReader(input),
-	)
+	pr := testPrompter(t, &out, "\n")
 
 	result := pr.Prompt("Enter name", "bob")
 
@@ -46,12 +54,7 @@ func TestPrompter_Prompt_EmptyInput_ReturnsFallback(t *testing.T) {
 
 func TestPrompter_Prompt_NoFallback(t *testing.T) {
 	var out bytes.Buffer
-	input := strings.NewReader("value\n")
-	pr := NewPrompter(
-		withWriters(&out, &out),
-		WithColor(false),
-		withReader(input),
-	)
+	pr := testPrompter(t, &out, "value\n")
 
 	result := pr.Prompt("Enter", "")
 
@@ -80,11 +83,7 @@ func TestPrompter_Continue_Yes(t *testing.T) {
 
 	for _, tt := range tests {
 		var out bytes.Buffer
-		pr := NewPrompter(
-			withWriters(&out, &out),
-			WithColor(false),
-			withReader(strings.NewReader(tt.input)),
-		)
+		pr := testPrompter(t, &out, tt.input)
 
 		got := pr.Continue("proceed?")
 		if got != tt.want {
@@ -95,11 +94,7 @@ func TestPrompter_Continue_Yes(t *testing.T) {
 
 func TestPrompter_Continue_ShowsPrompt(t *testing.T) {
 	var out bytes.Buffer
-	pr := NewPrompter(
-		withWriters(&out, &out),
-		WithColor(false),
-		withReader(strings.NewReader("n\n")),
-	)
+	pr := testPrompter(t, &out, "n\n")
 
 	pr.Continue("delete everything?")
 
@@ -113,11 +108,7 @@ func TestPrompter_Continue_ShowsPrompt(t *testing.T) {
 
 func TestPrompter_HasPrinterMethods(t *testing.T) {
 	var out bytes.Buffer
-	pr := NewPrompter(
-		withWriters(&out, &out),
-		WithColor(false),
-		withReader(strings.NewReader("")),
-	)
+	pr := testPrompter(t, &out, "")
 
 	pr.Info("info message")
 	pr.Success("success message")
@@ -128,5 +119,45 @@ func TestPrompter_HasPrinterMethods(t *testing.T) {
 	}
 	if !strings.Contains(got, "✓") {
 		t.Errorf("expected success marker, got %q", got)
+	}
+}
+
+func TestNewPrompter_NonTerminalInput_ReturnsUnavailableWithoutWriting(t *testing.T) {
+	var out bytes.Buffer
+	pr, err := NewPrompter(
+		withWriters(&out, &out),
+		withTerminalCheck(func(input io.Reader) bool {
+			if input != os.Stdin {
+				t.Errorf("terminal check input = %T, want os.Stdin", input)
+			}
+			return false
+		}),
+	)
+	if pr != nil {
+		t.Fatal("NewPrompter() returned a prompter for non-terminal input")
+	}
+	if !errx.IsKind(err, errx.Unavailable) {
+		t.Fatalf("NewPrompter() error kind = %v, want unavailable", err)
+	}
+	if !strings.Contains(err.Error(), "flag or configuration") {
+		t.Errorf("NewPrompter() error = %q, want actionable flag or configuration guidance", err)
+	}
+	if got := out.String(); got != "" {
+		t.Errorf("NewPrompter() wrote %q before returning an error", got)
+	}
+}
+
+func TestNewPrompter_TerminalCheckAllowsInput(t *testing.T) {
+	var out bytes.Buffer
+	pr, err := NewPrompter(
+		withWriters(&out, &out),
+		withReader(strings.NewReader("value\n")),
+		withTerminalCheck(func(io.Reader) bool { return true }),
+	)
+	if err != nil {
+		t.Fatalf("NewPrompter() error = %v", err)
+	}
+	if got := pr.Prompt("Value", ""); got != "value" {
+		t.Errorf("Prompt() = %q, want value", got)
 	}
 }

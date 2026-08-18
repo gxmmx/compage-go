@@ -16,6 +16,9 @@ type config struct {
 	errWriter io.Writer
 	// inputReader, when non-nil, overrides the Prompter's stdin. Testing only.
 	inputReader io.Reader
+	// terminalCheck reports whether the Prompter's selected input is a terminal.
+	// Testing only.
+	terminalCheck func(io.Reader) bool
 
 	outToErr      bool
 	errToOut      bool
@@ -75,5 +78,12 @@ func withWriters(out, err io.Writer) Option {
 func withReader(r io.Reader) Option {
 	return func(c *config) {
 		c.inputReader = r
+	}
+}
+
+// withTerminalCheck overrides Prompter input-terminal validation. Testing only.
+func withTerminalCheck(check func(io.Reader) bool) Option {
+	return func(c *config) {
+		c.terminalCheck = check
 	}
 }

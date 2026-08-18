@@ -34,20 +34,25 @@ type Printer interface {
 
 // New creates a Printer with the given options.
 func New(opts ...Option) Printer {
-	return newPrinter(opts...)
+	return newPrinter(newConfig(opts...))
 }
 
-// newPrinter builds the concrete *printer. It exists so callers within the
-// package (e.g. NewPrompter) can share the printer's writer and mutex without
-// an interface type assertion.
-func newPrinter(opts ...Option) *printer {
+// newConfig resolves construction options once. It is shared by NewPrompter so
+// both its printer and input use the same configuration.
+func newConfig(opts ...Option) *config {
 	cfg := &config{
 		level: slog.LevelInfo,
 	}
 	for _, opt := range opts {
 		opt(cfg)
 	}
+	return cfg
+}
 
+// newPrinter builds the concrete *printer from resolved configuration. It
+// exists so callers within the package (e.g. NewPrompter) can share the
+// printer's writer and mutex without an interface type assertion.
+func newPrinter(cfg *config) *printer {
 	outW, errW := resolveStreams(cfg)
 
 	lvl := &slog.LevelVar{}

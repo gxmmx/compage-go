@@ -4,6 +4,7 @@
 // can swap those standard streams. Derived printers share a write lock and are
 // safe to use concurrently.
 //
-// Prompter adds stdin-based interactive prompts. Callers should check that stdin
-// is a terminal before prompting rather than attempting to read from a pipe.
+// Prompter adds stdin-based interactive prompts. NewPrompter validates that
+// stdin is a terminal and returns an unavailable error rather than reading from
+// a pipe.
 package printer

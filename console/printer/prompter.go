@@ -7,7 +7,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gxmmx/compage-go/errx"
 	"github.com/gxmmx/compage-go/style"
+	"github.com/gxmmx/compage-go/term"
 )
 
 // Prompter extends Printer with interactive input capabilities.
@@ -18,28 +20,35 @@ type Prompter interface {
 }
 
 // NewPrompter creates a Prompter with the given options. It accepts the same
-// options as New; a Prompter is a Printer that can also read interactive input.
-//
-// Input always comes from os.Stdin. Prompting is only appropriate when the
-// process is attached to a terminal — callers should verify that (e.g. a TTY
-// check) before using a Prompter, and otherwise fall back to a non-interactive
-// path rather than prompting into a pipe.
-func NewPrompter(opts ...Option) Prompter {
-	p := newPrinter(opts...)
-
-	cfg := &config{}
-	for _, opt := range opts {
-		opt(cfg)
-	}
+// options as New, validates that its input is interactive, and returns an
+// unavailable error when it is not. A Prompter is a Printer that can also read
+// interactive input.
+func NewPrompter(opts ...Option) (Prompter, error) {
+	cfg := newConfig(opts...)
 	input := cfg.inputReader
 	if input == nil {
 		input = os.Stdin
 	}
+	check := cfg.terminalCheck
+	if check == nil {
+		check = isTerminalInput
+	}
+	if !check(input) {
+		return nil, errx.New(
+			"printer: interactive input unavailable: stdin is not a terminal; supply the required value with a flag or configuration",
+			errx.WithKind(errx.Unavailable),
+		)
+	}
 
 	return &prompter{
-		printer: p,
+		printer: newPrinter(cfg),
 		input:   input,
-	}
+	}, nil
+}
+
+func isTerminalInput(input io.Reader) bool {
+	stream, ok := input.(io.Writer)
+	return ok && term.IsTerminal(stream)
 }
 
 type prompter struct {

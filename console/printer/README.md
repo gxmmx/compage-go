@@ -69,30 +69,23 @@ slog.LevelError → only error
 
 ## Prompter
 
-`NewPrompter(...Option)` returns a `Prompter` — a `Printer` that can also read
-interactive input. It accepts the same options as `New`.
+`NewPrompter(...Option)` returns a `Prompter` and an error. It accepts the same
+options as `New` and validates that stdin is interactive.
 
 ```go
-pr := printer.NewPrompter()
+pr, err := printer.NewPrompter()
+if err != nil {
+    return err // use flags or configuration in non-interactive contexts
+}
 name := pr.Prompt("Project name", "my-app")   // returns fallback on empty input
 if pr.Continue("Proceed?") {                    // [y/N], default No
     // ...
 }
 ```
 
-Input always comes from **stdin**. Prompting only makes sense when the process is
-attached to a terminal, so callers should check for a TTY before using a Prompter:
-
-```go
-if !term.IsTerminal(os.Stdin) {
-    return fmt.Errorf("no terminal: pass --name to run non-interactively")
-}
-pr := printer.NewPrompter()
-name := pr.Prompt("Project name", "")
-```
-
-If input isn't interactive, fail with instructions on which flags to pass rather
-than blocking on a pipe.
+Input always comes from **stdin**. If it is not a terminal, construction returns
+an `errx.Unavailable` error with guidance to supply the required value through a
+flag or configuration, rather than blocking on a pipe.
 
 ## stdlib interop & presentation hints
 
@@ -121,5 +114,5 @@ The canonical key strings live in the root `console` package as `HintIndent` /
 
 - **No arbitrary writers.** Output goes to stdout/stderr only (redirectable
   between them). Use `console/logger` to write structured records to files.
-- **No prompting into pipes.** Input is stdin; check for a TTY before prompting.
+- **No prompting into pipes.** Input is stdin; NewPrompter rejects non-terminal input.
 - **No format options.** Output is formatted text with fixed markers.
