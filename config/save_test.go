@@ -5,9 +5,40 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gxmmx/compage-go/errx"
 )
+
+func TestSaveRoundTripsDuration(t *testing.T) {
+	type Config struct {
+		Interval time.Duration `default:"30s" save:"true"`
+	}
+	path := filepath.Join(t.TempDir(), "config.toml")
+	c, err := Load[Config](WithFile(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(string(contents), `interval = '30s'`) {
+		t.Fatalf("saved duration = %q", contents)
+	}
+
+	reloaded, err := Load[Config](WithFile(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.Values().Interval; got != 30*time.Second {
+		t.Fatalf("Interval = %v, want 30s", got)
+	}
+}
 
 func TestSavePromotesOnlySetValues(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")

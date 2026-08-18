@@ -6,7 +6,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"time"
 
 	"github.com/gxmmx/compage-go/errx"
 )
@@ -107,7 +109,11 @@ func (c *Config[T]) Save() error {
 		if f.sensitive {
 			sensitive = true
 		}
-		putNested(root, strings.Split(f.key, "."), reflectValueAt(v, f.index).Interface())
+		value := reflectValueAt(v, f.index).Interface()
+		if f.typ == reflect.TypeFor[time.Duration]() {
+			value = value.(time.Duration).String()
+		}
+		putNested(root, strings.Split(f.key, "."), value)
 	}
 	b, err := encodeFile(st.path, root)
 	if err != nil {
