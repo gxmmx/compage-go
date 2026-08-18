@@ -153,18 +153,51 @@ cancellation errors, so they should not be the primary API for new code.
 
 ## Package boundary options
 
+### Settled package location: `console/term`
+
+Move the current top-level `term` package to `console/term` as part of the
+interactive-prompt work (or as a small preparatory change). It currently owns a
+single console-specific capability helper, and terminal detection is a concern
+shared by printer and prompt rather than by the rest of the module.
+
+The resulting console area is intentionally cohesive:
+
+```text
+console/
+  logger/    # structured logging for console applications
+  printer/   # semantic terminal output and presentation
+  prompt/    # interactive input and question state (future)
+  term/      # terminal capability and terminal-session helpers
+```
+
+Existing imports of `github.com/gxmmx/compage-go/term` will need a mechanical
+migration to `github.com/gxmmx/compage-go/console/term`; update package docs,
+READMEs, and all internal imports together. Keep `console/term` small and
+focused on reusable terminal primitives, not prompt-specific state or rendering.
+
+This location decision is settled. It does not decide the public interactive
+API, whether compatibility constructors remain in `printer`, or the exact
+printer/prompt adapter shape.
+
 ### Recommended: sibling `console/prompt`
 
 ```text
 console/
   printer/   # semantic output, styles, tables, slog handler
   prompt/    # terminal session, input decoder, state, rendering
-  term/      # terminal capability helpers
+  term/      # terminal capability and session helpers
 ```
 
-`prompt` owns interactive input and depends on a small output/presentation
-adapter, supplied by `printer`, for final messages. It should not attempt to
-implement `printer.Printer`; input interaction is a separate responsibility.
+`prompt` owns interactive input and depends on a small printer-owned interactive
+capability for presentation. `prompt` may import its `printer` sibling; the
+dependency is one-way and `printer` must not import `prompt`. The capability
+must preserve the chosen printer's stream routing, color policy, write lock, and
+indentation for both temporary redraw frames and final semantic output. The
+current `Printer` interface is intentionally too small for that purpose, so its
+exact companion interface and construction path remain to be designed.
+
+`prompt` should not attempt to implement `printer.Printer`; input interaction is
+a separate responsibility.
 
 This leaves the printer focused and avoids making prompt internals dominate its
 source directory as raw-mode, rendering, and tests grow.
