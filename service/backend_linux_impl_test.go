@@ -147,7 +147,7 @@ func TestSystemdEnsureReportsSpecificChangeReasons(t *testing.T) {
 }
 
 func TestSystemdVersionAndStatus(t *testing.T) {
-	o := operation{spec: specification{name: "x", scope: System}, runner: &fakeRunner{outputs: map[string]string{"--version": "systemd 260\n", "show": "loaded\nenabled\nactive\n42\n0\n"}}, files: &fakeFiles{values: map[string][]byte{"/etc/systemd/system/x.service": {}}}}
+	o := operation{spec: specification{name: "x", scope: System}, runner: &fakeRunner{outputs: map[string]string{"--version": "systemd 260\n", "show": "MainPID=42\nExecMainStatus=0\nLoadState=loaded\nActiveState=active\nUnitFileState=enabled\n"}}, files: &fakeFiles{values: map[string][]byte{"/etc/systemd/system/x.service": {}}}}
 	s, e := systemdBackend{}.status(context.Background(), &o)
 	if e != nil || !s.Installed || !s.Enabled || !s.Running || s.PID != 42 || s.ExitCode == nil || *s.ExitCode != 0 {
 		t.Fatalf("status=%+v err=%v", s, e)

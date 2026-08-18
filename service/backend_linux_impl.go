@@ -116,21 +116,31 @@ func (systemdBackend) status(c context.Context, o *operation) (Status, error) {
 		return Status{}, errx.New("service: inspecting definition "+systemdPath(o), errx.WithCause(e))
 	}
 	s := Status{Installed: e == nil}
-	out, x := o.runner.run(c, "systemctl", systemdArgs(o, "show", "--property=LoadState,UnitFileState,ActiveState,MainPID,ExecMainStatus", "--value", o.spec.name+".service")...)
+	out, x := o.runner.run(c, "systemctl", systemdArgs(o, "show", "--property=LoadState,UnitFileState,ActiveState,MainPID,ExecMainStatus", o.spec.name+".service")...)
 	if x != nil {
 		if err := unavailableManager(x, "systemctl"); err != nil {
 			return Status{}, err
 		}
 		return s, nil
 	}
-	values := strings.Split(strings.TrimSpace(out), "\n")
-	if len(values) >= 5 {
-		s.Loaded = values[0] == "loaded"
-		s.Enabled = values[1] == "enabled"
-		s.Running = values[2] == "active"
-		s.PID, _ = strconv.Atoi(values[3])
-		if code, err := strconv.Atoi(values[4]); err == nil {
-			s.ExitCode = &code
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		key, value, found := strings.Cut(line, "=")
+		if !found {
+			continue
+		}
+		switch key {
+		case "LoadState":
+			s.Loaded = value == "loaded"
+		case "UnitFileState":
+			s.Enabled = value == "enabled"
+		case "ActiveState":
+			s.Running = value == "active"
+		case "MainPID":
+			s.PID, _ = strconv.Atoi(value)
+		case "ExecMainStatus":
+			if code, err := strconv.Atoi(value); err == nil {
+				s.ExitCode = &code
+			}
 		}
 	}
 	s.Detail = strings.TrimSpace(out)
