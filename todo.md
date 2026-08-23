@@ -36,6 +36,7 @@ Two data flows:
 **Load (sources → struct):**
 ```
 registry(T)        defaults ─┐
+                   initial ─┤
    │                env ─────┤
    ▼                flags ───┤→ layer store (ordered, each labeled) → resolve(key)
 schema/fieldMeta    files ───┤        │                                   │
@@ -50,7 +51,7 @@ layer store + registry(save/sensitive tags) → select writable keys
 ```
 
 The **layer store** is the centerpiece and what replaces both vipers: an ordered set
-of named layers (`default`, `file`, `env`, `flag`, `set`, …). A
+of named layers (`default`, `initial`, `file`, `env`, `flag`, `set`, …). A
 lookup walks layers by precedence and returns `(value, winningLayer)`. Provenance is
 just the winning layer's label — no second parse needed.
 
@@ -88,7 +89,7 @@ encode `map[string]any` → bytes. Both directions (Save needs encode).
 ### D. Layer store & resolution engine  ← **replaces dual-viper**
 An ordered list of layers; each layer is `{label string, values map[string]any}`.
 - `resolve(key) → (value, label)`: first hit walking high→low precedence.
-- Precedence (low→high), matching v1: `default < file < env < flag < set`.
+- Precedence (low→high): `default < initial < file < env < flag < set`.
 - Provenance = winning label. Kills the `filev` second-parse entirely.
 - Each invocation loads at most one file. Candidate paths are checked in order; the
   first existing file becomes the file layer and its path is part of provenance.

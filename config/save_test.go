@@ -123,6 +123,65 @@ func TestSaveNeverWritesSensitiveDefault(t *testing.T) {
 	}
 }
 
+func TestSaveDoesNotWriteInitialValue(t *testing.T) {
+	type Config struct {
+		Value string `save:"true"`
+	}
+	path := filepath.Join(t.TempDir(), "config.json")
+	c, err := Load[Config](WithFile(path), WithInitial("value", "initial"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source, ok := c.Source("value"); !ok || source != SourceInitial {
+		t.Fatalf("source = %v, %v, want initial", source, ok)
+	}
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contains(string(contents), "initial") {
+		t.Fatalf("initial value was saved: %q", contents)
+	}
+
+	if err := c.Set("value", "persisted"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+	contents, err = os.ReadFile(path)
+	if err != nil || !contains(string(contents), "persisted") {
+		t.Fatalf("set value was not saved: %q, %v", contents, err)
+	}
+}
+
+func TestSaveDoesNotWriteSetValueWithoutSaveTag(t *testing.T) {
+	type Config struct {
+		Value string
+	}
+	path := filepath.Join(t.TempDir(), "config.json")
+	c, err := Load[Config](WithFile(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Set("value", "runtime"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contains(string(contents), "runtime") {
+		t.Fatalf("unset save tag allowed value to be saved: %q", contents)
+	}
+}
+
 func TestSaveFailuresAreTypedAndDoNotPublish(t *testing.T) {
 	type Config struct {
 		Value string `default:"value" save:"true"`

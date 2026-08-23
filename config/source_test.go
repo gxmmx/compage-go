@@ -9,7 +9,7 @@ import (
 
 func TestSourceStrings(t *testing.T) {
 	for source, want := range map[Source]string{
-		SourceNone: "none", SourceDefault: "default", SourceFile: "file", SourceEnv: "env", SourceFlag: "flag", SourceSet: "set",
+		SourceNone: "none", SourceDefault: "default", SourceInitial: "initial", SourceFile: "file", SourceEnv: "env", SourceFlag: "flag", SourceSet: "set",
 	} {
 		if got := source.String(); got != want {
 			t.Fatalf("Source(%d).String() = %q, want %q", source, got, want)
@@ -27,7 +27,7 @@ func TestLoadPrecedenceAndProvenance(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("TEST_CONFIG_PORT", "9100")
-	c, err := Load[testConfig](WithFile(path), WithFlagSource(testFlags{"port": {"9200", true}}))
+	c, err := Load[testConfig](WithFile(path), WithInitial("port", "initial"), WithFlagSource(testFlags{"port": {"9200", true}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,6 +56,75 @@ func TestLoadPrecedenceAndProvenance(t *testing.T) {
 	var unknown *UnknownKeyError
 	if !errors.As(err, &unknown) || unknown.Source() != "file" {
 		t.Fatalf("unknown file error = %T %v", err, err)
+	}
+}
+
+func TestInitialPrecedenceAndReload(t *testing.T) {
+	type Config struct {
+		Value string `env:"INITIAL_TEST_VALUE"`
+	}
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"value":"file"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("INITIAL_TEST_VALUE", "env")
+	c, err := Load[Config](WithFile(path), WithInitial("value", "initial"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Values().Value; got != "env" {
+		t.Fatalf("environment value = %q, want env", got)
+	}
+	if source, ok := c.Source("value"); !ok || source != SourceEnv {
+		t.Fatalf("source = %v, %v, want env", source, ok)
+	}
+
+	if err := os.Unsetenv("INITIAL_TEST_VALUE"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Values().Value; got != "file" {
+		t.Fatalf("file value = %q, want file", got)
+	}
+	if source, ok := c.Source("value"); !ok || source != SourceFile {
+		t.Fatalf("source = %v, %v, want file", source, ok)
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Values().Value; got != "initial" {
+		t.Fatalf("initial value = %q, want initial", got)
+	}
+	if source, ok := c.Source("value"); !ok || source != SourceInitial {
+		t.Fatalf("source = %v, %v, want initial", source, ok)
+	}
+}
+
+func TestSetOverridesInitialAndSurvivesReload(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	c, err := Load[struct {
+		Value string `default:"default"`
+	}](WithFile(path), WithInitial("value", "initial"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Set("value", "set"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Values().Value; got != "set" {
+		t.Fatalf("value after reload = %q, want set", got)
+	}
+	if source, ok := c.Source("value"); !ok || source != SourceSet {
+		t.Fatalf("source = %v, %v, want set", source, ok)
 	}
 }
 

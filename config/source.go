@@ -6,6 +6,7 @@ type Source uint8
 const (
 	SourceNone Source = iota
 	SourceDefault
+	SourceInitial
 	SourceFile
 	SourceEnv
 	SourceFlag
@@ -18,6 +19,8 @@ func (s Source) String() string {
 		return "none"
 	case SourceDefault:
 		return "default"
+	case SourceInitial:
+		return "initial"
 	case SourceFile:
 		return "file"
 	case SourceEnv:
@@ -63,7 +66,7 @@ func cloneRawValue(value any) any {
 
 func cloneLayers(in map[Source]map[string]any) map[Source]map[string]any {
 	out := map[Source]map[string]any{}
-	for _, source := range []Source{SourceDefault, SourceFile, SourceEnv, SourceFlag, SourceSet} {
+	for _, source := range []Source{SourceDefault, SourceInitial, SourceFile, SourceEnv, SourceFlag, SourceSet} {
 		out[source] = cloneRaw(in[source])
 	}
 	return out
