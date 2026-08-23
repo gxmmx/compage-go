@@ -20,30 +20,60 @@ run = "go mod tidy -diff"
 
 [tasks.lint]
 description = "Run golangci-lint across every package"
-run = "./tests/lint/run.sh"
+run = "./.tests/lint/run.sh"
 
 [tasks.test]
 description = "Run uncached tests across every package or one directory"
 usage = '''
 arg "[dir]" help="Repository-relative directory to test" default="."
 '''
-run = './tests/unit/run.sh "${usage_dir?}"'
+run = './.tests/unit/run.sh "${usage_dir?}"'
 
 [tasks."test:race"]
 description = "Run race tests across every package or one directory"
 usage = '''
 arg "[dir]" help="Repository-relative directory to test" default="."
 '''
-run = './tests/unit/run.sh --race "${usage_dir?}"'
+run = './.tests/unit/run.sh --race "${usage_dir?}"'
 
-[tasks."test:coverage:config"]
-description = "Write and report per-function coverage for the config package"
-run = './tests/unit/run.sh --coverage config'
+[tasks."test:coverage"]
+description = "Write and report per-package coverage under .dist/coverage"
+usage = '''
+arg "[dir]" help="Repository-relative package directory to cover" default="."
+'''
+run = './.tests/unit/run.sh --coverage "${usage_dir?}"'
+
+[tasks."test:race:coverage"]
+description = "Run tests once with race detection and coverage"
+usage = '''
+arg "[dir]" help="Repository-relative package directory to test" default="."
+'''
+run = './.tests/unit/run.sh --race --coverage "${usage_dir?}"'
+
+[tasks."test:coverage:report"]
+description = "Report existing per-package coverage profiles"
+usage = '''
+arg "[dir]" help="Repository-relative package directory to report" default="."
+'''
+run = './.tests/unit/coverage.sh "${usage_dir?}"'
 
 [tasks."test:fuzz"]
-description = "Run each config fuzz target briefly"
-run = './tests/unit/run.sh --fuzz'
+description = "Run each fuzz target briefly"
+usage = '''
+arg "[dir]" help="Repository-relative package directory to fuzz" default="."
+'''
+run = './.tests/unit/run.sh --fuzz "${usage_dir?}"'
 
 [tasks.check]
-description = "Verify formatting, module metadata, lint, vet, tests, race tests, and fuzz smoke tests"
-depends = ["fmt:check", "mod:check", "lint", "vet", "test", "test:race", "test:fuzz"]
+description = "Run fast repository checks and ordinary unit tests"
+usage = '''
+arg "[dir]" help="Repository-relative package directory to test" default="."
+'''
+run = './.tests/check/run.sh "${usage_dir?}"'
+
+[tasks."check:all"]
+description = "Run full checks with race, coverage, and fuzz smoke tests"
+usage = '''
+arg "[dir]" help="Repository-relative package directory to test" default="."
+'''
+run = './.tests/check/run.sh --all "${usage_dir?}"'

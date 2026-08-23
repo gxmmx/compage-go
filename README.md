@@ -66,27 +66,33 @@ This installs Go 1.26 and golangci-lint 2.13.0.
 
 ### Workflow
 
-Use `mise tasks` to discover available tasks. The current verification entry
-point is:
+Use `mise tasks` to discover available tasks. The fast verification entry point
+is:
 
 ```bash
 mise run check
 ```
 
-Run all tests with `mise run test`. Pass a repository-relative directory after
-`--` to target one package, such as `mise run test -- config` or
-`mise run test:race -- config`.
+Run the full verification workflow with `mise run check:all`. Pass a
+repository-relative directory after `--` to scope package-level checks, such as
+`mise run check -- config`, `mise run test:race -- config`, or
+`mise run test:coverage -- config`.
 
 ### Testing
 
-`mise run check` verifies formatting, tidy module metadata, golangci-lint,
-uncached unit tests, race tests, and the config fuzz smoke tests. Coverage
-output is written under `.dist/coverage/` by
-`mise run test:coverage:config`.
+`mise run check` verifies formatting, tidy module metadata, golangci-lint, and
+uncached unit tests. `mise run check:all` adds race-enabled coverage tests,
+fuzz smoke tests, and a concise coverage report. Race and coverage are combined
+for one test execution per package. Per-package coverage output is written
+under `.dist/coverage/` by `mise run test:coverage`; omitting the package
+argument covers every package. Display existing profiles with
+`mise run test:coverage:report`. A package argument scopes package-level tests,
+race, coverage, fuzzing, and reporting; formatting, module, and lint checks
+remain repository-wide.
 
-Reusable test and lint entry points live under [`tests/`](./tests/): unit tests
-are handled by [`tests/unit/run.sh`](./tests/unit/run.sh), and linting uses the
-configuration in [`tests/lint/.golangci.yml`](./tests/lint/.golangci.yml).
+Reusable test and lint entry points live under [`.tests/`](./.tests/): unit tests
+are handled by [`.tests/unit/run.sh`](./.tests/unit/run.sh), and linting uses the
+configuration in [`.tests/lint/.golangci.yml`](./.tests/lint/.golangci.yml).
 
 ## Design documents
 
