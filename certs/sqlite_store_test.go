@@ -26,7 +26,7 @@ func TestSQLiteStoreAndEncryptedCSRKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer authority.Close()
+	defer func() { _ = authority.Close() }()
 	if _, err = authority.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestSQLiteLedgerUsesSeparateDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer authority.Close()
+	defer func() { _ = authority.Close() }()
 	if _, err = authority.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}

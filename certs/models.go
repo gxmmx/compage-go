@@ -65,7 +65,7 @@ func normalizeDisplayName(name string) (string, error) {
 		return "", invalid("display name is required", nil)
 	}
 	for _, r := range name {
-		if !(r == ' ' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9') {
+		if r != ' ' && (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') {
 			return "", invalid("display name may contain only ASCII letters, digits, and spaces", nil)
 		}
 	}
@@ -195,10 +195,6 @@ func normalizeSANs(s SANs) (SANs, error) {
 	return r, nil
 }
 
-func (s SANs) empty() bool {
-	return len(s.DNSNames)+len(s.IPAddresses)+len(s.URIs)+len(s.EmailAddresses) == 0
-}
-
 type SANPolicy struct {
 	DNSSuffixes  []string     `json:"dns_suffixes,omitempty"`
 	IPRanges     []*net.IPNet `json:"ip_ranges,omitempty"`
@@ -302,7 +298,7 @@ func finishIssuerDefinition(name string, o optionValues) (IssuerDefinition, erro
 
 func asciiLetters(v string) bool {
 	for _, r := range v {
-		if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z') {
+		if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') {
 			return false
 		}
 	}
@@ -322,7 +318,7 @@ func validDNSName(name string, wildcard bool) bool {
 			return false
 		}
 		for _, r := range label {
-			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') {
+			if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' {
 				return false
 			}
 		}

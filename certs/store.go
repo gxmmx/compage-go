@@ -3,7 +3,6 @@ package certs
 import (
 	"context"
 	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"time"
 )
@@ -58,18 +57,6 @@ type authorityState struct {
 	Roots      map[int]*rootRecord      `json:"roots"`
 	Issuers    map[string]*issuerRecord `json:"issuers"`
 	Pending    *pendingManifest         `json:"pending,omitempty"`
-}
-
-func (s *authorityState) clone() (*authorityState, error) {
-	b, err := json.Marshal(s)
-	if err != nil {
-		return nil, err
-	}
-	var out authorityState
-	if err = json.Unmarshal(b, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
 }
 
 type backend interface {

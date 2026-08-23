@@ -56,26 +56,37 @@ with additional usage guidance have their own README:
 
 ### Setup
 
-Install Go 1.26 and [Task](https://taskfile.dev/). The repository does not yet
-define a Mise workflow.
+Install [Mise](https://mise.jdx.dev/), then install the pinned project tools:
+
+```bash
+mise install
+```
+
+This installs Go 1.26 and golangci-lint 2.13.0.
 
 ### Workflow
 
-Use `task --list` to discover available tasks. The current verification entry
+Use `mise tasks` to discover available tasks. The current verification entry
 point is:
 
 ```bash
-task check
+mise run check
 ```
 
-For focused work, use the package-specific tasks, such as
-`task test:config` or `task test:race:config`.
+Run all tests with `mise run test`. Pass a repository-relative directory after
+`--` to target one package, such as `mise run test -- config` or
+`mise run test:race -- config`.
 
 ### Testing
 
-`task check` verifies formatting, tidy module metadata, vet, uncached tests,
-race tests, and the config fuzz smoke tests. Coverage output is written under
-`.dist/coverage/` by `task test:coverage:config`.
+`mise run check` verifies formatting, tidy module metadata, golangci-lint,
+uncached unit tests, race tests, and the config fuzz smoke tests. Coverage
+output is written under `.dist/coverage/` by
+`mise run test:coverage:config`.
+
+Reusable test and lint entry points live under [`tests/`](./tests/): unit tests
+are handled by [`tests/unit/run.sh`](./tests/unit/run.sh), and linting uses the
+configuration in [`tests/lint/.golangci.yml`](./tests/lint/.golangci.yml).
 
 ## Design documents
 

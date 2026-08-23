@@ -15,28 +15,35 @@ extended guidance.
 
 - `.design/` contains active implementation plans and design documents.
 - `.dist/` contains disposable generated output and is ignored by Git.
+- `tests/unit/run.sh` is the shared entry point for package unit tests, race
+  tests, coverage, and fuzz smoke tests.
+- `tests/lint/run.sh` runs golangci-lint using `tests/lint/.golangci.yml`.
 - Platform-specific implementations use Go filename suffixes such as
   `_darwin` and `_linux`; preserve those boundaries when changing packages.
 - The root README documents the package inventory and current workflows.
 
 ## Development workflow
 
-`Taskfile.yml` is the current workflow entry point. Mise is not configured yet.
-Use `task --list` to discover tasks and `task check` for the complete
-verification workflow.
+`mise.toml` is the current workflow entry point. Run `mise install` to install
+the pinned Go and golangci-lint versions. Use `mise tasks` to discover tasks and
+`mise run check` for the complete verification workflow.
 
 Useful focused tasks include:
 
-- `task test:<package>` for uncached tests in one package;
-- `task test:race:<package>` for one package with the race detector; and
-- `task test:coverage:config` for config coverage output under `.dist/`.
+- `mise run test -- <package>` for uncached tests in one package;
+- `mise run test:race -- <package>` for one package with the race detector; and
+- `mise run test:coverage:config` for config coverage output under `.dist/`; and
+- `mise run lint` for the configured golangci-lint checks.
 
-Keep package tests next to the Go files they exercise. Run the relevant Task
-checks after code or workflow changes.
+Keep package tests next to the Go files they exercise. Run the relevant Mise
+checks after code or workflow changes. The repository uses package-level Go
+unit tests, with shared runners under `tests/` rather than separate integration
+or end-to-end suites.
 
 ## Constraints
 
 - Keep changes scoped to the package or documentation they affect.
 - Do not add CI, release, or publishing workflows unless explicitly requested.
 - Keep generated artifacts under `.dist/` and do not commit them.
-- Preserve the existing Task-based workflow until a Mise workflow is designed.
+- Keep `mise.toml` and its tool versions as the authoritative workflow
+  configuration.

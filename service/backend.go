@@ -46,7 +46,7 @@ func (osFiles) write(p string, b []byte, m os.FileMode) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }()
 	if err = tmp.Chmod(m); err == nil {
 		_, err = tmp.Write(b)
 	}
@@ -66,7 +66,7 @@ func (osFiles) write(p string, b []byte, m os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer dir.Close()
+	defer func() { _ = dir.Close() }()
 	return dir.Sync()
 }
 func (osFiles) mkdirAll(p string, m os.FileMode) error { return os.MkdirAll(p, m) }

@@ -1,6 +1,23 @@
+# OS
 .DS_Store
+
+# Local environment
 .env
+.env.*
+!.env.example
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Mise
+mise.local.toml
+
+# Generated artifacts
 .dist/
+
+# Go
 *.exe
 *.test
 *.out
