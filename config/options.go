@@ -126,7 +126,7 @@ func (c *Config[T]) options() (options, error) {
 			return o, configErr("invalid environment prefix", errx.Invalid, "", "", "", nil, false)
 		}
 		for _, r := range o.envPrefix {
-			if !(r == '_' || unicode.IsUpper(r) || unicode.IsDigit(r)) {
+			if r != '_' && !unicode.IsUpper(r) && !unicode.IsDigit(r) {
 				return o, configErr("invalid environment prefix", errx.Invalid, "", "", "", nil, false)
 			}
 		}

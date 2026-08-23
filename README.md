@@ -1,106 +1,106 @@
 # compage-go
 
-Foundational packages for building Go applications. Removes the need to
-re-implement common program infrastructure — logging, configuration, CLI
-output — from scratch in every project.
+Foundational Go packages for building applications. compage-go provides common
+program infrastructure for logging, configuration, terminal output, host
+integration, certificates, and operating-system services without imposing a
+framework or runtime model.
 
-Opinionated where it matters (structured JSON logs, tiered config resolution),
-generic where it doesn't (no framework lock-in, no runtime magic).
+## Info
+
+This repository is a Go module targeting Go 1.26. The packages are independent
+where practical and can be adopted individually.
 
 ## Packages
 
 | Package | Purpose |
 |---------|---------|
-| [`console`](./console/) | Structured logging (JSON/slog), terminal output with semantic markers, pre-init record queuing, interactive prompts |
-| [`config`](./config/) | Multi-source configuration from a single struct definition (flag > env > file > default), source tracking, runtime mutation, persistence |
+| [`account`](./account/) | Looks up and reconciles local operating-system accounts |
+| [`certs`](./certs/) | Manages a product-local mTLS certificate authority, certificate bundles, CSRs, and persistence |
+| [`config`](./config/) | Loads typed configuration from defaults, files, environment variables, and flags with source tracking and persistence |
+| [`configpflag`](./configpflag/) | Adapts `pflag` flag sets to the `config` package |
+| [`console`](./console/) | Provides shared console primitives |
+| [`console/logger`](./console/logger/) | Provides structured JSON logging with stable program and unit identity |
+| [`console/printer`](./console/printer/) | Provides human-facing, level-gated terminal output |
+| [`errx`](./errx/) | Provides transport-neutral semantic error classification |
+| [`host`](./host/) | Reports read-only facts about the current host and network |
+| [`service`](./service/) | Manages a program's operating-system service |
+| [`style`](./style/) | Applies ANSI terminal styling when appropriate |
+| [`term`](./term/) | Detects terminal-backed streams |
+| [`text`](./text/) | Provides utilities for sanitizing and manipulating text |
 
-## Install
+## Usage
+
+Add the module as a dependency with:
 
 ```bash
 go get github.com/gxmmx/compage-go
 ```
 
-## Development checks
+Import the package that provides the capability your application needs. Each
+package contains a `doc.go` file with package-level API information. Packages
+with additional usage guidance have their own README:
 
-With [Task](https://taskfile.dev/) installed, run the complete verification workflow:
+- [`account/README.md`](./account/README.md)
+- [`certs/README.md`](./certs/README.md)
+- [`config/README.md`](./config/README.md)
+- [`configpflag/README.md`](./configpflag/README.md)
+- [`console/README.md`](./console/README.md)
+- [`console/logger/README.md`](./console/logger/README.md)
+- [`console/printer/README.md`](./console/printer/README.md)
+- [`errx/README.md`](./errx/README.md)
+- [`host/README.md`](./host/README.md)
+- [`style/README.md`](./style/README.md)
+- [`text/README.md`](./text/README.md)
+
+## Development
+
+### Setup
+
+Install [Mise](https://mise.jdx.dev/), then install the pinned project tools:
 
 ```bash
-task check
+mise install
 ```
 
-`task test` runs uncached tests across the repository and `task test:race` runs the
-same suite with Go's race detector. Target one package directory with a wildcard task:
-`task test:config` or `task test:race:config`. `task check` additionally verifies
-formatting and tidy module metadata, runs vet and race tests, and executes the
-config fuzz targets. The fuzz step is config-only because it is currently the
-repository's only package with fuzz tests.
+This installs Go 1.26 and golangci-lint 2.13.0.
 
-## Quick start
+### Workflow
 
-### Logging
+Use `mise tasks` to discover available tasks. The fast verification entry point
+is:
 
-```go
-import "github.com/gxmmx/compage-go/console"
-
-log := console.New("myapp", console.WithStderr())
-log.Info("started", "port", 8080)
-
-// Nested units for subsystem identity
-db := log.For("storage")
-db.Info("connected", "path", "/var/lib/app.db")
-// Output: {..., "unit": "myapp.storage", ...}
+```bash
+mise run check
 ```
 
-### Configuration
+Run the full verification workflow with `mise run check:all`. Pass a
+repository-relative directory after `--` to scope package-level checks, such as
+`mise run check -- config`, `mise run test:race -- config`, or
+`mise run test:coverage -- config`.
 
-```go
-import "github.com/gxmmx/compage-go/config"
+### Testing
 
-type AppConfig struct {
-    LogLevel string `cfg:"log_level" save:"true" flag:"log-level" env:"LOG_LEVEL" default:"info"`
-    Port     int    `cfg:"port"      save:"true" flag:"port"      env:"PORT"      default:"8080"`
-}
+`mise run check` verifies formatting, tidy module metadata, golangci-lint, and
+uncached unit tests. `mise run check:all` adds race-enabled coverage tests,
+fuzz smoke tests, and a concise coverage report. Race and coverage are combined
+for one test execution per package. Per-package coverage output is written
+under `.dist/coverage/` by `mise run test:coverage`; omitting the package
+argument covers every package. Display existing profiles with
+`mise run test:coverage:report`. A package argument scopes package-level tests,
+race, coverage, fuzzing, and reporting; formatting, module, and lint checks
+remain repository-wide.
 
-cfg, err := config.Load[AppConfig](
-    config.WithFile("/etc/myapp/config.toml"),
-    config.WithEnvPrefix("MYAPP"),
-)
+Reusable test and lint entry points live under [`.tests/`](./.tests/): unit tests
+are handled by [`.tests/unit/run.sh`](./.tests/unit/run.sh), and linting uses the
+configuration in [`.tests/lint/.golangci.yml`](./.tests/lint/.golangci.yml).
 
-fmt.Println(cfg.Values().Port)       // resolved value
-source, _ := cfg.Source("port")
-fmt.Println(source)                  // flag, env, file, default, or set
-```
+## Design documents
 
-### Terminal output
+Current implementation plans are kept under [`.design/`](./.design/):
 
-```go
-import "github.com/gxmmx/compage-go/console"
-
-p := console.NewPrinter()
-p.Success("enrolled agent %s", name)
-p.Warn("certificate expires in %d days", days)
-p.WithIndent(1).Info("listening on %s", addr)
-```
-
-## Design principles
-
-- **Infallible construction.** Loggers and printers never fail to create. File
-  errors degrade gracefully to stderr.
-- **Single definition.** One struct with tags defines all configuration fields,
-  their sources, defaults, and persistence rules.
-- **No global state.** No package-level vars, no init functions, no singletons.
-- **Stdlib first.** Built on `log/slog`, `context`, and standard interfaces.
-  External dependencies are kept minimal.
-- **Test-friendly.** All I/O goes through interfaces. Writers, readers, and flag
-  sets are injectable.
-
-## Documentation
-
-Each package has its own README with full API documentation, usage patterns, and
-design rationale:
-
-- [console/README.md](./console/README.md)
-- [config/README.md](./config/README.md)
+- [`configv2-plan.md`](./.design/configv2-plan.md)
+- [`ca-implementation-plan.md`](./.design/ca-implementation-plan.md)
+- [`interactive-prompter-plan.md`](./.design/interactive-prompter-plan.md)
 
 ## License
 

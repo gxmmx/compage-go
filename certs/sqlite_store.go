@@ -129,7 +129,7 @@ func NewSQLiteStore(path string, opts ...Option) (*SQLiteStore, error) {
 		err = s.verifySchema(context.Background())
 	}
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	mode := os.FileMode(0600)
@@ -140,12 +140,12 @@ func NewSQLiteStore(path string, opts ...Option) (*SQLiteStore, error) {
 		err = os.Chmod(s.path, mode)
 	}
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	if !s.private && !s.readOnly {
 		if err = os.Chown(s.path, s.uid, s.gid); err != nil {
-			db.Close()
+			_ = db.Close()
 			return nil, err
 		}
 	}
@@ -224,7 +224,7 @@ func (s *SQLiteStore) load(ctx context.Context, issuer bool) (*authorityState, e
 		if e != nil {
 			return nil, e
 		}
-		defer db.Close()
+		defer func() { _ = db.Close() }()
 		parityDB = db
 		_, _ = db.ExecContext(ctx, `PRAGMA query_only=ON`)
 		err = db.QueryRowContext(ctx, `SELECT document FROM authority_state WHERE singleton=1`).Scan(&data)
@@ -260,7 +260,7 @@ func (s *SQLiteStore) update(ctx context.Context, mutate func(*authorityState) e
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var data []byte
 	state := &authorityState{}
 	existingState := false
@@ -577,29 +577,29 @@ func (s *SQLiteStore) openLedger() (*sql.DB, error) {
 	statements := []string{`PRAGMA journal_mode=DELETE`, `CREATE TABLE IF NOT EXISTS ledger (fingerprint TEXT PRIMARY KEY, issuer TEXT NOT NULL, issuer_version INTEGER NOT NULL, serial TEXT NOT NULL, document BLOB NOT NULL, UNIQUE(issuer,issuer_version,serial))`}
 	for _, q := range statements {
 		if _, err = db.Exec(q); err != nil {
-			db.Close()
+			_ = db.Close()
 			return nil, err
 		}
 	}
 	if fileCreated {
 		if err = os.Chmod(s.ledgerPath(), fileMode); err != nil {
-			db.Close()
+			_ = db.Close()
 			return nil, err
 		}
 		if !s.private {
 			if err = os.Chown(s.ledgerPath(), s.uid, s.gid); err != nil {
-				db.Close()
+				_ = db.Close()
 				return nil, err
 			}
 		}
 	}
 	info, err := os.Lstat(s.ledgerPath())
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	if err = s.validateSQLiteLedgerFile(info, fileMode); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	return db, nil
@@ -633,7 +633,7 @@ func (s *SQLiteStore) appendLedger(ctx context.Context, r LedgerRecord) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var stateData []byte
 	if err = tx.QueryRowContext(ctx, `SELECT document FROM authority_state WHERE singleton=1`).Scan(&stateData); err != nil {
 		return err
@@ -649,7 +649,7 @@ func (s *SQLiteStore) appendLedger(ctx context.Context, r LedgerRecord) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	data, err := json.Marshal(r)
 	if err != nil {
 		return err
@@ -696,7 +696,7 @@ func (s *SQLiteStore) lookupLedger(ctx context.Context, issuer string, version i
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	var data []byte
 	err = db.QueryRowContext(ctx, `SELECT document FROM ledger WHERE issuer=? AND issuer_version=? AND serial=?`, issuer, version, serial).Scan(&data)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -719,7 +719,7 @@ func (s *SQLiteStore) listLedger(ctx context.Context, cursor string, limit int) 
 	if err != nil {
 		return nil, "", err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	offset := 0
 	if cursor != "" {
 		offset, err = strconv.Atoi(cursor)
@@ -734,7 +734,7 @@ func (s *SQLiteStore) listLedger(ctx context.Context, cursor string, limit int) 
 	if err != nil {
 		return nil, "", err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []LedgerRecord
 	for rows.Next() {
 		var data []byte

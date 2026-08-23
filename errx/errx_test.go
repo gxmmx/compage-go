@@ -129,10 +129,10 @@ func TestNewPanicsForInvalidInput(t *testing.T) {
 		name string
 		call func()
 	}{
-		{name: "empty", call: func() { New("") }},
-		{name: "invalid kind", call: func() { New("x", WithKind(Kind(99))) }},
-		{name: "nil cause", call: func() { New("x", WithCause(nil)) }},
-		{name: "nil option", call: func() { New("x", nil) }},
+		{name: "empty", call: func() { _ = New("") }},
+		{name: "invalid kind", call: func() { _ = New("x", WithKind(Kind(99))) }},
+		{name: "nil cause", call: func() { _ = New("x", WithCause(nil)) }},
+		{name: "nil option", call: func() { _ = New("x", nil) }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

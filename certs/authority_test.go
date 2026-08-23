@@ -18,7 +18,7 @@ func TestFileStoreLifecycleAndSigning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer authority.Close()
+	defer func() { _ = authority.Close() }()
 	result, err := authority.Ensure(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ func TestFileStoreLifecycleAndSigning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer issuer.Close()
+	defer func() { _ = issuer.Close() }()
 	csr, err := NewCSR(WithSubject(Identity{Organization: "Acme", CommonName: "device-1"}), WithSANs(SANs{DNSNames: []string{"device-1.example.test"}}), WithKeySpec(Ed25519))
 	if err != nil {
 		t.Fatal(err)

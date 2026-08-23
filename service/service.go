@@ -392,7 +392,7 @@ func validServiceName(v string) bool {
 		return false
 	}
 	for _, r := range v {
-		if !(r == '.' || r == '-' || r == '_' || r == ':' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+		if r != '.' && r != '-' && r != '_' && r != ':' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
 			return false
 		}
 	}
@@ -403,7 +403,7 @@ func validEnv(v string) bool {
 		return false
 	}
 	for i, r := range v {
-		if !(r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (i > 0 && r >= '0' && r <= '9')) {
+		if r != '_' && (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (i == 0 || r < '0' || r > '9') {
 			return false
 		}
 	}

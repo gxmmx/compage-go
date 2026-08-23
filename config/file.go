@@ -103,7 +103,7 @@ func (c *Config[T]) Save() error {
 	v := reflectValue(st.values)
 	for _, f := range r.fields {
 		origin := st.origins[f.key]
-		if !f.save || !(origin.Source == SourceDefault || origin.Source == SourceFile || origin.Source == SourceSet) || (f.sensitive && origin.Source != SourceFile && origin.Source != SourceSet) {
+		if !f.save || (origin.Source != SourceDefault && origin.Source != SourceFile && origin.Source != SourceSet) || (f.sensitive && origin.Source != SourceFile && origin.Source != SourceSet) {
 			continue
 		}
 		if f.sensitive {
@@ -133,7 +133,7 @@ func (c *Config[T]) Save() error {
 		return fileErr("create temporary file", errx.Internal, st.path, err, true)
 	}
 	name := tmp.Name()
-	defer os.Remove(name)
+	defer func() { _ = os.Remove(name) }()
 	if err = tmp.Chmod(mode); err == nil {
 		_, err = tmp.Write(b)
 	}

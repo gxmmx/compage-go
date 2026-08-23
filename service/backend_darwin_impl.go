@@ -234,9 +234,10 @@ func plist(o *operation) string {
 		b.WriteString(xml(o.spec.stderr))
 		b.WriteString("</string>\n")
 	}
-	if o.spec.restart == RestartAlways {
+	switch o.spec.restart {
+	case RestartAlways:
 		b.WriteString("<key>KeepAlive</key><true/>\n")
-	} else if o.spec.restart == RestartOnFailure {
+	case RestartOnFailure:
 		b.WriteString("<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>\n")
 	}
 	b.WriteString("<key>RunAtLoad</key><true/>\n</dict></plist>\n")

@@ -153,7 +153,7 @@ func (s *FileStore) withLock(ctx context.Context, fn func() error) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_ = f.Chmod(0640)
 	_ = f.Chown(s.uid, s.gid)
 	if err = acquireFileLock(ctx, f); err != nil {
@@ -460,7 +460,7 @@ func (s *FileStore) withAuthorityReadLock(ctx context.Context, fn func() error) 
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if err = acquireFileReadLock(ctx, f); err != nil {
 		return err
 	}
@@ -473,7 +473,7 @@ func (s *FileStore) appendLedgerRecord(ctx context.Context, r LedgerRecord) erro
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if err = acquireFileLock(ctx, f); err != nil {
 		return err
 	}
@@ -516,7 +516,7 @@ func (s *FileStore) readLedger(ctx context.Context) ([]LedgerRecord, error) {
 		}
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var out []LedgerRecord
 	reader := bufio.NewReader(f)
 	for {
@@ -594,7 +594,7 @@ func (s *FileStore) withLedgerReadLock(ctx context.Context, fn func() error) err
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if err = acquireFileReadLock(ctx, f); err != nil {
 		return err
 	}

@@ -1,0 +1,14 @@
+# golangci-lint v2 configuration for compage-go.
+version: "2"
+
+linters:
+  # standard = errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  settings:
+    govet:
+      disable:
+        - inline
+
+formatters:
+  enable:
+    - gofmt

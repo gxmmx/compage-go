@@ -170,7 +170,6 @@ func randomSerial() (*big.Int, error) {
 	b[0] |= 0x40
 	return new(big.Int).SetBytes(b), nil
 }
-func signerClone(s crypto.Signer) crypto.Signer { return s }
 func signerIsNil(s crypto.Signer) bool {
 	if s == nil {
 		return true

@@ -222,7 +222,6 @@ type fakeFS struct {
 type trackingFS struct {
 	info                   os.FileInfo
 	mkdirs, chowns, chmods int
-	lastUID, lastGID       int
 	lastMode               os.FileMode
 }
 

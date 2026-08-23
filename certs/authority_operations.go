@@ -2,7 +2,6 @@ package certs
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -381,11 +380,4 @@ func zero(v []byte) {
 	for i := range v {
 		v[i] = 0
 	}
-}
-
-func verifyCertAgainst(cert *x509.Certificate, parent *x509.Certificate) error {
-	if err := cert.CheckSignatureFrom(parent); err != nil {
-		return corrupt("certificate signature verification failed", err)
-	}
-	return nil
 }
