@@ -25,6 +25,7 @@ func (directoryTestBackend) ensure(context.Context, *operation) (EnsureResult, e
 	return EnsureResult{}, nil
 }
 func (directoryTestBackend) start(context.Context, *operation) error            { return nil }
+func (directoryTestBackend) restart(context.Context, *operation) error          { return nil }
 func (directoryTestBackend) stop(context.Context, *operation) error             { return nil }
 func (directoryTestBackend) uninstall(context.Context, *operation) error        { return nil }
 func (directoryTestBackend) status(context.Context, *operation) (Status, error) { return Status{}, nil }

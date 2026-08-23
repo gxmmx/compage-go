@@ -25,13 +25,41 @@ func TestLaunchdPlistRendersEscapedDeterministicValues(t *testing.T) {
 
 func TestLaunchdStartUsesOnlyRunner(t *testing.T) {
 	f := &fakeFiles{values: map[string][]byte{}}
-	r := &fakeRunner{}
+	r := &fakeRunner{errors: map[string]error{"print": errors.New("not loaded")}}
 	o := operation{spec: specification{name: "com.example.x", binary: "/bin/x", scope: User}, user: host.UserInfo{UID: "501", Home: "/tmp/user"}, files: f, runner: r}
 	if err := (launchdBackend{}).start(context.Background(), &o); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.Join(r.calls[2], " "); got != "launchctl bootstrap gui/501 /tmp/user/Library/LaunchAgents/com.example.x.plist" {
 		t.Fatalf("bootstrap=%q", got)
+	}
+}
+
+func TestLaunchdStartDoesNotForceRestartLoadedJob(t *testing.T) {
+	f := &fakeFiles{values: map[string][]byte{}}
+	r := &fakeRunner{outputs: map[string]string{"print": "loaded"}}
+	o := operation{spec: specification{name: "com.example.x", binary: "/bin/x", scope: User}, user: host.UserInfo{UID: "501", Home: "/tmp/user"}, files: f, runner: r}
+	if err := (launchdBackend{}).start(context.Background(), &o); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range r.calls {
+		if len(call) > 1 && call[1] == "bootout" {
+			t.Fatalf("Start unloaded loaded job: %v", r.calls)
+		}
+	}
+	if got := strings.Join(r.calls[len(r.calls)-1], " "); got != "launchctl kickstart gui/501/com.example.x" {
+		t.Fatalf("kickstart=%q", got)
+	}
+}
+
+func TestLaunchdRestartUsesForceKickstart(t *testing.T) {
+	r := &fakeRunner{outputs: map[string]string{"print": "loaded"}}
+	o := operation{spec: specification{name: "com.example.x", scope: User}, user: host.UserInfo{UID: "501", Home: "/tmp/user"}, runner: r}
+	if err := (launchdBackend{}).restart(context.Background(), &o); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(r.calls[len(r.calls)-1], " "); got != "launchctl kickstart -k gui/501/com.example.x" {
+		t.Fatalf("restart=%q", got)
 	}
 }
 

@@ -80,6 +80,9 @@ func TestOperationRejectsCancelledLifecycleCall(t *testing.T) {
 	if err := o.start(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("start error=%v", err)
 	}
+	if err := o.restart(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("restart error=%v", err)
+	}
 }
 
 func TestEnsureRejectsNonExecutableBinary(t *testing.T) {

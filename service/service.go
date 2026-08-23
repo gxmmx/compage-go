@@ -287,9 +287,17 @@ func New(opts ...Option) (*Manager, error) {
 	}
 	return &Manager{op: operation{spec: s, platform: p, user: u, root: host.IsRoot(), backend: b, runner: execRunner{}, files: osFiles{}, ensureAccount: account.Ensure}}, nil
 }
-func (m *Manager) Ensure(c context.Context) (EnsureResult, error)      { return m.op.ensure(c) }
-func (m *Manager) Start(c context.Context) error                       { return m.op.start(c) }
-func (m *Manager) Stop(c context.Context) error                        { return m.op.stop(c) }
+func (m *Manager) Ensure(c context.Context) (EnsureResult, error) { return m.op.ensure(c) }
+
+// Start enables and starts the service without forcing a restart when it is already running.
+func (m *Manager) Start(c context.Context) error { return m.op.start(c) }
+
+// Restart restarts the service without changing its enabled state.
+func (m *Manager) Restart(c context.Context) error { return m.op.restart(c) }
+
+// Stop disables and stops the service.
+func (m *Manager) Stop(c context.Context) error { return m.op.stop(c) }
+
 func (m *Manager) Uninstall(c context.Context) error                   { return m.op.uninstall(c) }
 func (m *Manager) Purge(c context.Context, options PurgeOptions) error { return m.op.purge(c, options) }
 func (m *Manager) Status(c context.Context) (Status, error)            { return m.op.status(c) }

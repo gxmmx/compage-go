@@ -195,6 +195,7 @@ type backend interface {
 	validate(specification) error
 	ensure(context.Context, *operation) (EnsureResult, error)
 	start(context.Context, *operation) error
+	restart(context.Context, *operation) error
 	stop(context.Context, *operation) error
 	uninstall(context.Context, *operation) error
 	status(context.Context, *operation) (Status, error)
