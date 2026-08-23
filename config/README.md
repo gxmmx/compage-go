@@ -1,6 +1,6 @@
 # config
 
-`config` resolves a typed struct from `default < file < env < flag < set`.
+`config` resolves a typed struct from `default < initial < file < env < flag < set`.
 It loads at most one TOML, YAML, or JSON file; unknown file keys and invalid values
 are errors. `Values` returns a defensive snapshot, while `Source`, `Origin`, and
 `HasSource` expose provenance.
@@ -18,10 +18,10 @@ port := cfg.Values().Port
 _ = port
 ```
 
-`Save` writes only fields marked `save:"true"`. Values whose winning source is env or
-flag are transient and are not written. To persist an externally supplied value, call
-`Set` first. Sensitive defaults are never written; sensitive file or set values use
-mode `0600`.
+`Save` writes only fields marked `save:"true"`. Values whose winning source is initial,
+env, or flag are transient and are not written. To persist an externally supplied
+value, call `Set` first. Sensitive defaults are never written; sensitive file or set
+values use mode `0600`.
 
 Use `configpflag.Source{Flags: fs}` with `WithFlagSource` when adapting a pflag flag
 set. The core package does not import pflag.
@@ -48,7 +48,7 @@ flags; for example, `default:"one,two"` and `MYAPP_TAGS=one,two`.
 | `default` | String-form default value. |
 | `required:"true"` | Requires a value from any layer and cannot be combined with `default`. |
 | `sensitive:"true"` | Redacts value data from diagnostics and prevents default values from being saved. |
-| `save:"true"` | Allows the winning default, file, or set value to be written by `Save`. |
+| `save:"true"` | Allows the winning default, file, or set value to be written by `Save`; initial, environment, and flag values remain transient. |
 | `validate` | Name of a validator registered with `WithValidator`. |
 
 Duplicate config keys, environment variables, and flags are schema errors. File
@@ -71,11 +71,11 @@ only when it is genuinely absent. JSON, TOML, YAML, and YML extensions are accep
 target. It writes a fresh, atomically replaced document; comments and formatting are
 not preserved. Directory syncing is attempted where the platform supports it.
 
-`WithInitial` supplies values for the initial `set` layer. It is useful for supplying
-trusted bootstrap values—such as values constructed by embedding code or a secret
-provider—that must override file, environment, and flags and remain across reloads.
-`Set` is the runtime equivalent and validates the whole prospective configuration
-before publishing it.
+`WithInitial` supplies non-persistent bootstrap values for the initial layer. Initial
+values override defaults but are overridden by file, environment, and flag values.
+They are useful for satisfying required fields when no normal source provides a value.
+To make an externally supplied value persistent, call `Set` after loading; `Set`
+validates the whole prospective configuration before publishing it.
 
 Readers may call `Values`, `Source`, `Origin`, `HasSource`, `Path`, and `FileLoaded`
 concurrently with loads and mutations. Returned `[]string` fields are copied. `Save`

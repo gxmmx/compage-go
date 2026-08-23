@@ -23,7 +23,7 @@ func resolve[T any](r registry, layers map[Source]map[string]any, path string, f
 	var out T
 	outValue := reflect.ValueOf(&out).Elem()
 	st := state[T]{origins: map[string]Origin{}, present: map[Source]map[string]bool{}, layers: cloneLayers(layers), path: path, fileLoaded: fileLoaded}
-	for _, source := range []Source{SourceDefault, SourceFile, SourceEnv, SourceFlag, SourceSet} {
+	for _, source := range []Source{SourceDefault, SourceInitial, SourceFile, SourceEnv, SourceFlag, SourceSet} {
 		st.present[source] = map[string]bool{}
 		for key := range layers[source] {
 			st.present[source][key] = true
@@ -32,7 +32,7 @@ func resolve[T any](r registry, layers map[Source]map[string]any, path string, f
 	for _, field := range r.fields {
 		var raw any
 		source := SourceNone
-		for _, candidate := range []Source{SourceSet, SourceFlag, SourceEnv, SourceFile, SourceDefault} {
+		for _, candidate := range []Source{SourceSet, SourceFlag, SourceEnv, SourceFile, SourceInitial, SourceDefault} {
 			if value, ok := layers[candidate][field.key]; ok {
 				raw, source = value, candidate
 				break

@@ -46,17 +46,16 @@ func (c *Config[T]) Load() (err error) {
 	registryRecord.AddAttrs(slog.Int("fields", len(r.fields)))
 	c.logs.add(registryRecord)
 	c.mu.RLock()
-	set, previouslyLoaded := cloneRaw(c.set), c.loaded
+	set := cloneRaw(c.set)
 	c.mu.RUnlock()
-	if !previouslyLoaded {
-		for _, v := range o.initial {
-			if _, ok := r.byKey[v.key]; !ok {
-				return configErr("unknown initial key", errx.Invalid, v.key, "", "", nil, false)
-			}
-			set[v.key] = cloneRawValue(v.value)
+	initial := map[string]any{}
+	for _, v := range o.initial {
+		if _, ok := r.byKey[v.key]; !ok {
+			return configErr("unknown initial key", errx.Invalid, v.key, "", "", nil, false)
 		}
+		initial[v.key] = cloneRawValue(v.value)
 	}
-	layers := map[Source]map[string]any{SourceDefault: {}, SourceFile: {}, SourceEnv: {}, SourceFlag: {}, SourceSet: set}
+	layers := map[Source]map[string]any{SourceDefault: {}, SourceInitial: initial, SourceFile: {}, SourceEnv: {}, SourceFlag: {}, SourceSet: set}
 	for _, f := range r.fields {
 		if f.hasDef {
 			layers[SourceDefault][f.key] = f.def
@@ -94,7 +93,7 @@ func (c *Config[T]) Load() (err error) {
 		}
 	}
 	sourcesRecord := newLogRecord(slog.LevelDebug, "config sources discovered")
-	for _, source := range []Source{SourceDefault, SourceFile, SourceEnv, SourceFlag, SourceSet} {
+	for _, source := range []Source{SourceDefault, SourceInitial, SourceFile, SourceEnv, SourceFlag, SourceSet} {
 		sourcesRecord.AddAttrs(slog.Int(source.String(), len(layers[source])))
 	}
 	c.logs.add(sourcesRecord)
