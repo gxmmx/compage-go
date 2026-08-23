@@ -79,8 +79,7 @@ func (b launchdBackend) ensure(c context.Context, o *operation) (EnsureResult, e
 	}
 	result := EnsureResult{Installed: true, Changed: changed, Reasons: changeReasons(old, o.spec, changed, absent)}
 	if changed {
-		_, err := o.runner.run(c, "launchctl", "print", domain(o)+"/"+o.spec.name)
-		result.RestartRequired = err == nil
+		result.RestartRequired, _ = launchdLoaded(c, o)
 	}
 	return result, nil
 }
@@ -89,12 +88,31 @@ func (launchdBackend) start(c context.Context, o *operation) error {
 	if _, err := commandOutput(c, o.runner, "launchctl", "enable", d+"/"+o.spec.name); err != nil {
 		return err
 	}
-	_, _ = o.runner.run(c, "launchctl", "bootout", d+"/"+o.spec.name)
-	if _, e := commandOutput(c, o.runner, "launchctl", "bootstrap", d, launchdPath(o)); e != nil {
-		return e
+	loaded, err := launchdLoaded(c, o)
+	if err != nil {
+		return err
 	}
-	_, e := commandOutput(c, o.runner, "launchctl", "kickstart", "-k", d+"/"+o.spec.name)
+	if !loaded {
+		if _, e := commandOutput(c, o.runner, "launchctl", "bootstrap", d, launchdPath(o)); e != nil {
+			return e
+		}
+	}
+	_, e := commandOutput(c, o.runner, "launchctl", "kickstart", d+"/"+o.spec.name)
 	return e
+}
+func (launchdBackend) restart(c context.Context, o *operation) error {
+	d := domain(o)
+	loaded, err := launchdLoaded(c, o)
+	if err != nil {
+		return err
+	}
+	if !loaded {
+		if _, e := commandOutput(c, o.runner, "launchctl", "bootstrap", d, launchdPath(o)); e != nil {
+			return e
+		}
+	}
+	_, err = commandOutput(c, o.runner, "launchctl", "kickstart", "-k", d+"/"+o.spec.name)
+	return err
 }
 func (launchdBackend) stop(c context.Context, o *operation) error {
 	if _, err := o.files.stat(launchdPath(o)); errors.Is(err, fs.ErrNotExist) {
@@ -106,6 +124,19 @@ func (launchdBackend) stop(c context.Context, o *operation) error {
 	}
 	_, e := commandOutput(c, o.runner, "launchctl", "bootout", d+"/"+o.spec.name)
 	return e
+}
+func launchdLoaded(c context.Context, o *operation) (bool, error) {
+	_, err := o.runner.run(c, "launchctl", "print", domain(o)+"/"+o.spec.name)
+	if err == nil {
+		return true, nil
+	}
+	if ctxErr := c.Err(); ctxErr != nil {
+		return false, errx.New("service: checking launchd service", errx.WithCause(ctxErr))
+	}
+	if managerErr := unavailableManager(err, "launchctl"); managerErr != nil {
+		return false, managerErr
+	}
+	return false, nil
 }
 func (b launchdBackend) uninstall(c context.Context, o *operation) error {
 	_ = b.stop(c, o)

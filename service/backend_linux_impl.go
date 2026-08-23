@@ -72,13 +72,25 @@ func (b systemdBackend) ensure(c context.Context, o *operation) (EnsureResult, e
 			return EnsureResult{}, e
 		}
 	}
-	return EnsureResult{Installed: true, Changed: changed, Reasons: changeReasons(old, o.spec, changed, absent)}, nil
+	result := EnsureResult{Installed: true, Changed: changed, Reasons: changeReasons(old, o.spec, changed, absent)}
+	if changed {
+		out, err := o.runner.run(c, "systemctl", systemdArgs(o, "show", "--property=LoadState", o.spec.name+".service")...)
+		result.RestartRequired = err == nil && strings.TrimSpace(out) == "LoadState=loaded"
+	}
+	return result, nil
 }
 func (systemdBackend) start(c context.Context, o *operation) error {
 	if err := checkSystemdVersion(c, o); err != nil {
 		return err
 	}
 	_, e := commandOutput(c, o.runner, "systemctl", systemdArgs(o, "enable", "--now", o.spec.name+".service")...)
+	return e
+}
+func (systemdBackend) restart(c context.Context, o *operation) error {
+	if err := checkSystemdVersion(c, o); err != nil {
+		return err
+	}
+	_, e := commandOutput(c, o.runner, "systemctl", systemdArgs(o, "restart", o.spec.name+".service")...)
 	return e
 }
 func (systemdBackend) stop(c context.Context, o *operation) error {

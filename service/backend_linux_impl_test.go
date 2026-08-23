@@ -70,6 +70,7 @@ type fakeRunner struct {
 	calls   [][]string
 	out     string
 	err     error
+	errors  map[string]error
 	outputs map[string]string
 }
 
@@ -80,11 +81,16 @@ func (f *fakeRunner) run(_ context.Context, n string, a ...string) (string, erro
 			return out, nil
 		}
 	}
+	if len(a) > 0 && f.errors != nil {
+		if err, ok := f.errors[a[0]]; ok {
+			return "", err
+		}
+	}
 	return f.out, f.err
 }
 func TestSystemdEnsureRendersDeterministically(t *testing.T) {
 	f := &fakeFiles{values: map[string][]byte{}}
-	r := &fakeRunner{outputs: map[string]string{"--version": "systemd 260\n"}}
+	r := &fakeRunner{outputs: map[string]string{"--version": "systemd 260\n", "show": "LoadState=loaded\n"}}
 	o := operation{spec: specification{name: "example", description: "Example", binary: "/opt/a b", args: []string{"serve", "x y"}, scope: System, env: map[string]string{"Z": "1", "A": "2"}, stdout: "/var/log/out", stderr: "/var/log/err"}, user: host.UserInfo{Home: "/tmp/u"}, files: f, runner: r}
 	got, e := systemdBackend{}.ensure(context.Background(), &o)
 	if e != nil || !got.Changed {
@@ -99,8 +105,19 @@ func TestSystemdEnsureRendersDeterministically(t *testing.T) {
 			t.Errorf("missing %q in %s", want, s)
 		}
 	}
-	if len(r.calls) != 2 || !strings.Contains(strings.Join(r.calls[1], " "), "daemon-reload") {
+	if !got.RestartRequired || len(r.calls) != 3 || !strings.Contains(strings.Join(r.calls[1], " "), "daemon-reload") {
 		t.Fatalf("calls=%v", r.calls)
+	}
+}
+
+func TestSystemdRestartUsesNativeRestart(t *testing.T) {
+	r := &fakeRunner{outputs: map[string]string{"--version": "systemd 260\n"}}
+	o := operation{spec: specification{name: "x", scope: User}, runner: r}
+	if err := (systemdBackend{}).restart(context.Background(), &o); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(r.calls[1], " "); got != "systemctl --user restart x.service" {
+		t.Fatalf("restart=%q", got)
 	}
 }
 func TestSystemdEnsureLeavesDefinitionWhenEqual(t *testing.T) {

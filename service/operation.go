@@ -142,6 +142,15 @@ func (o *operation) start(c context.Context) error {
 	}
 	return o.backend.start(c, o)
 }
+func (o *operation) restart(c context.Context) error {
+	if err := c.Err(); err != nil {
+		return errx.New("service: restart cancelled", errx.WithCause(err))
+	}
+	if err := o.systemPreflight(); err != nil {
+		return err
+	}
+	return o.backend.restart(c, o)
+}
 func (o *operation) stop(c context.Context) error {
 	if err := c.Err(); err != nil {
 		return errx.New("service: stop cancelled", errx.WithCause(err))
