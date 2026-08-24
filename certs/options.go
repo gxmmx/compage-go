@@ -1,6 +1,7 @@
 package certs
 
 import (
+	"crypto/x509"
 	"fmt"
 	"log/slog"
 	"net"
@@ -18,6 +19,7 @@ const (
 	scopeSign
 	scopeCSR
 	scopeLoad
+	scopeTrustBundle
 	scopeSave
 	scopeStore
 	scopePromote
@@ -77,6 +79,8 @@ type optionValues struct {
 	keySpecSet                                                   bool
 	keyPassphrase                                                []byte
 	keyPassphraseSet                                             bool
+	certificates                                                 []*x509.Certificate
+	certPEM                                                      [][]byte
 	certPaths                                                    []string
 	keyPath                                                      string
 	keyPathSet                                                   bool
@@ -102,8 +106,8 @@ func parseOptions(scope optionScope, opts []Option) (optionValues, error) {
 		if !o.validFor(scope) {
 			return v, invalid(o.optionName()+" is not valid for this operation", nil)
 		}
-		// WithCert, WithIssuer, and per-issuer rotation are intentionally repeatable.
-		if seen[o.optionName()] && o.optionName() != "WithCert" && o.optionName() != "WithIssuer" && o.optionName() != "WithIssuerRotateBefore" {
+		// Certificate sources, WithIssuer, and per-issuer rotation are intentionally repeatable.
+		if seen[o.optionName()] && o.optionName() != "WithCert" && o.optionName() != "WithCertPEM" && o.optionName() != "WithCertPath" && o.optionName() != "WithIssuer" && o.optionName() != "WithIssuerRotateBefore" {
 			return v, invalid(o.optionName()+" specified more than once", nil)
 		}
 		seen[o.optionName()] = true
@@ -220,8 +224,26 @@ func WithKeyPassphrase(v []byte) Option {
 		return nil
 	})
 }
-func WithCert(path string) Option {
-	return makeOption("WithCert", scopeLoad, func(o *optionValues) error {
+func WithCert(cert *x509.Certificate) Option {
+	return makeOption("WithCert", scopeLoad|scopeTrustBundle, func(o *optionValues) error {
+		if cert == nil {
+			return fmt.Errorf("certificate is nil")
+		}
+		o.certificates = append(o.certificates, cloneCertificate(cert))
+		return nil
+	})
+}
+func WithCertPEM(data []byte) Option {
+	return makeOption("WithCertPEM", scopeLoad|scopeTrustBundle, func(o *optionValues) error {
+		if len(data) == 0 {
+			return fmt.Errorf("PEM data is empty")
+		}
+		o.certPEM = append(o.certPEM, append([]byte(nil), data...))
+		return nil
+	})
+}
+func WithCertPath(path string) Option {
+	return makeOption("WithCertPath", scopeLoad|scopeTrustBundle, func(o *optionValues) error {
 		if path == "" {
 			return fmt.Errorf("path is empty")
 		}

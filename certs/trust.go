@@ -3,29 +3,24 @@ package certs
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
-	"encoding/pem"
-	"sort"
 	"time"
 )
 
-func buildTrustBundlePEM(s *authorityState, now time.Time) []byte {
-	generations := []int{}
+func buildTrustBundle(s *authorityState, now time.Time) (*TrustBundle, error) {
+	certificates := make([]*x509.Certificate, 0, len(s.Roots))
 	for generation, root := range s.Roots {
-		if generation == s.ActiveRoot || (s.Pending != nil && generation == s.Pending.RootGeneration) || root.RetiredTrustUntil.After(now) {
-			generations = append(generations, generation)
+		if generation != s.ActiveRoot && (s.Pending == nil || generation != s.Pending.RootGeneration) && !root.RetiredTrustUntil.After(now) {
+			continue
 		}
+		cert, err := parseCertDER(root.CertificateDER)
+		if err != nil {
+			return nil, err
+		}
+		certificates = append(certificates, cert)
 	}
-	sort.Ints(generations)
-
-	var out []byte
-	for _, generation := range generations {
-		out = append(out, pem.EncodeToMemory(&pem.Block{
-			Type:  "CERTIFICATE",
-			Bytes: s.Roots[generation].CertificateDER,
-		})...)
-	}
-	return out
+	return newTrustBundle(certificates)
 }
 
 func trustBundleSHA256(bundlePEM []byte) string {
@@ -44,17 +39,32 @@ func pendingKind(kind string) PendingKind {
 	}
 }
 
-func managerStatus(s *authorityState, now time.Time, issuerSlug string) ManagerStatus {
-	status := ManagerStatus{
-		Revision:          s.Revision,
-		TrustBundleSHA256: trustBundleSHA256(buildTrustBundlePEM(s, now)),
+func managerStatus(s *authorityState, now time.Time, issuerSlug string) (ManagerStatus, error) {
+	bundle, err := buildTrustBundle(s, now)
+	if err != nil {
+		return ManagerStatus{}, err
 	}
+	status := ManagerStatus{Revision: s.Revision, TrustBundleSHA256: bundle.SHA256()}
 	if s.Pending == nil || (issuerSlug != "" && s.Pending.Issuers[issuerSlug] == 0) {
-		return status
+		return status, nil
 	}
 	status.Pending = true
 	status.PendingKind = pendingKind(s.Pending.Kind)
-	return status
+	return status, nil
+}
+
+// TrustBundle returns the authority's currently trusted root certificates.
+func (m *AuthorityManager) TrustBundle(ctx context.Context) (*TrustBundle, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return nil, &ConflictError{Message: "authority manager is closed"}
+	}
+	s, err := m.store.load(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	return buildTrustBundle(s, m.now())
 }
 
 // Status returns the authority's current persisted state.
@@ -68,35 +78,7 @@ func (m *AuthorityManager) Status(ctx context.Context) (ManagerStatus, error) {
 	if err != nil {
 		return ManagerStatus{}, err
 	}
-	return managerStatus(s, m.now(), ""), nil
-}
-
-// IsPending reports whether the authority has a pending operation.
-func (m *AuthorityManager) IsPending() (bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
-		return false, &ConflictError{Message: "authority manager is closed"}
-	}
-	s, err := m.store.load(context.Background(), false)
-	if err != nil {
-		return false, err
-	}
-	return s.Pending != nil, nil
-}
-
-// TrustBundleSHA256 returns the SHA-256 digest of TrustBundlePEM in lowercase hexadecimal.
-func (m *AuthorityManager) TrustBundleSHA256() (string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
-		return "", &ConflictError{Message: "authority manager is closed"}
-	}
-	s, err := m.store.load(context.Background(), false)
-	if err != nil {
-		return "", err
-	}
-	return trustBundleSHA256(buildTrustBundlePEM(s, m.now())), nil
+	return managerStatus(s, m.now(), "")
 }
 
 // Status returns this issuer's current persisted state.
@@ -114,55 +96,23 @@ func (m *IssuerManager) Status(ctx context.Context) (ManagerStatus, error) {
 	if issuer == nil || issuer.Definition.Name != m.name {
 		return ManagerStatus{}, &NotFoundError{Resource: "issuer " + m.name}
 	}
-	return managerStatus(s, m.now(), m.slug), nil
+	return managerStatus(s, m.now(), m.slug)
 }
 
-// IsPending reports whether this issuer has a staged certificate version.
-func (m *IssuerManager) IsPending() (bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
-		return false, &ConflictError{Message: "issuer manager is closed"}
-	}
-	s, err := m.store.load(context.Background(), true)
-	if err != nil {
-		return false, err
-	}
-	issuer := s.Issuers[m.slug]
-	if issuer == nil || issuer.Definition.Name != m.name {
-		return false, &NotFoundError{Resource: "issuer " + m.name}
-	}
-	if s.Pending == nil {
-		return false, nil
-	}
-	_, pending := s.Pending.Issuers[m.slug]
-	return pending, nil
-}
-
-// TrustBundlePEM returns the currently trusted root certificates in PEM format.
-func (m *IssuerManager) TrustBundlePEM() ([]byte, error) {
+// TrustBundle returns this issuer's currently trusted root certificates.
+func (m *IssuerManager) TrustBundle(ctx context.Context) (*TrustBundle, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
 		return nil, &ConflictError{Message: "issuer manager is closed"}
 	}
-	s, err := m.store.load(context.Background(), true)
+	s, err := m.store.load(ctx, true)
 	if err != nil {
 		return nil, err
 	}
-	return buildTrustBundlePEM(s, m.now()), nil
-}
-
-// TrustBundleSHA256 returns the SHA-256 digest of TrustBundlePEM in lowercase hexadecimal.
-func (m *IssuerManager) TrustBundleSHA256() (string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
-		return "", &ConflictError{Message: "issuer manager is closed"}
+	issuer := s.Issuers[m.slug]
+	if issuer == nil || issuer.Definition.Name != m.name {
+		return nil, &NotFoundError{Resource: "issuer " + m.name}
 	}
-	s, err := m.store.load(context.Background(), true)
-	if err != nil {
-		return "", err
-	}
-	return trustBundleSHA256(buildTrustBundlePEM(s, m.now())), nil
+	return buildTrustBundle(s, m.now())
 }

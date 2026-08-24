@@ -234,19 +234,6 @@ func (m *AuthorityManager) DiscardPending(ctx context.Context) error {
 	return err
 }
 
-func (m *AuthorityManager) TrustBundlePEM() ([]byte, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
-		return nil, &ConflictError{Message: "authority manager is closed"}
-	}
-	s, err := m.store.load(context.Background(), false)
-	if err != nil {
-		return nil, err
-	}
-	return buildTrustBundlePEM(s, m.now()), nil
-}
-
 func (m *AuthorityManager) ExportGeneratedUnlock() ([]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
