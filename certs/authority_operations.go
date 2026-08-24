@@ -234,19 +234,6 @@ func (m *AuthorityManager) DiscardPending(ctx context.Context) error {
 	return err
 }
 
-func (m *AuthorityManager) TrustBundlePEM() ([]byte, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
-		return nil, &ConflictError{Message: "authority manager is closed"}
-	}
-	s, err := m.store.load(context.Background(), false)
-	if err != nil {
-		return nil, err
-	}
-	return buildTrustBundlePEM(s, m.now()), nil
-}
-
 func (m *AuthorityManager) ExportGeneratedUnlock() ([]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -320,7 +307,7 @@ func (m *AuthorityManager) Inspect(ctx context.Context) (Inspection, error) {
 	out := Inspection{AuthorityID: s.Spec.ID, Revision: s.Revision, AuthorityName: s.Spec.Name, ActiveRoot: s.ActiveRoot, Issuers: map[string]int{}}
 	out.ActiveRootFingerprint = s.Roots[s.ActiveRoot].Fingerprint
 	if s.Pending != nil {
-		out.PendingKind = s.Pending.Kind
+		out.PendingKind = pendingKind(s.Pending.Kind)
 	}
 	for _, v := range s.Issuers {
 		out.Issuers[v.Definition.Name] = v.ActiveVersion

@@ -11,7 +11,7 @@ due rotations. `PromotePending` activates the entire pending transaction, while
 `DiscardPending` removes material that was never active. Root rotation stages a
 successor for every known issuer. Both managers expose fresh persisted status
 through `Status`, including pending kind and the effective trust-bundle SHA-256
-digest. `TrustBundlePEM` returns the bundle when its digest changes;
+digest. `TrustBundle(ctx)` returns a typed trust bundle when its digest changes;
 `IssuerManager.Reload` applies promoted issuer material to a live issuer
 process.
 

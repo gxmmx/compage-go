@@ -26,20 +26,26 @@ func LoadBundle(opts ...Option) (*CertificateBundle, error) {
 	if err != nil {
 		return nil, err
 	}
+	return loadCertificateBundle(o)
+}
+
+// NewCertificateBundle creates a certificate bundle from certificate objects,
+// PEM data, or certificate files supplied through the certificate options.
+func NewCertificateBundle(opts ...Option) (*CertificateBundle, error) {
+	o, err := parseOptions(scopeLoad, opts)
+	if err != nil {
+		return nil, err
+	}
+	return loadCertificateBundle(o)
+}
+
+func loadCertificateBundle(o optionValues) (*CertificateBundle, error) {
 	if o.keyPassphraseSet && !o.keyPathSet {
 		return nil, invalid("WithKeyPassphrase requires WithKey", nil)
 	}
-	var certificates []*x509.Certificate
-	for _, path := range o.certPaths {
-		data, err := readRegular(path)
-		if err != nil {
-			return nil, err
-		}
-		parsed, err := parseCertificatesPEM(data)
-		if err != nil {
-			return nil, fmt.Errorf("certs: load %s: %w", path, err)
-		}
-		certificates = append(certificates, parsed...)
+	certificates, err := loadCertificateInputs(o)
+	if err != nil {
+		return nil, err
 	}
 	b, err := normalizeBundle(certificates, nil)
 	if err != nil {
@@ -56,10 +62,39 @@ func LoadBundle(opts ...Option) (*CertificateBundle, error) {
 		}
 		b = next
 	}
-	if len(o.certPaths) == 0 && !o.keyPathSet {
+	if len(certificates) == 0 && !o.keyPathSet {
 		return nil, invalid("at least one certificate or key is required", nil)
 	}
 	return b, nil
+}
+
+func loadCertificateInputs(o optionValues) ([]*x509.Certificate, error) {
+	var certificates []*x509.Certificate
+	for _, cert := range o.certificates {
+		if cert == nil {
+			return nil, corrupt("nil certificate", nil)
+		}
+		certificates = append(certificates, cloneCertificate(cert))
+	}
+	for _, data := range o.certPEM {
+		parsed, err := parseCertificatesPEM(data)
+		if err != nil {
+			return nil, err
+		}
+		certificates = append(certificates, parsed...)
+	}
+	for _, path := range o.certPaths {
+		data, err := readRegular(path)
+		if err != nil {
+			return nil, err
+		}
+		parsed, err := parseCertificatesPEM(data)
+		if err != nil {
+			return nil, fmt.Errorf("certs: load %s: %w", path, err)
+		}
+		certificates = append(certificates, parsed...)
+	}
+	return certificates, nil
 }
 
 func readRegular(path string) ([]byte, error) {
@@ -77,6 +112,14 @@ func readRegular(path string) ([]byte, error) {
 		return nil, invalid("input must be a regular non-symlink file", nil)
 	}
 	return os.ReadFile(path)
+}
+
+func cloneCertificate(cert *x509.Certificate) *x509.Certificate {
+	if cert == nil {
+		return nil
+	}
+	copy := *cert
+	return &copy
 }
 
 func parseCertificatesPEM(data []byte) ([]*x509.Certificate, error) {
@@ -106,11 +149,33 @@ func parseCertificatesPEM(data []byte) ([]*x509.Certificate, error) {
 	return out, nil
 }
 
-func (b *CertificateBundle) AddCertificatesPEM(data []byte) (*CertificateBundle, error) {
+func (b *CertificateBundle) AddCert(cert *x509.Certificate) (*CertificateBundle, error) {
+	if b == nil {
+		return nil, invalid("nil certificate bundle", nil)
+	}
+	return b.addCertificates([]*x509.Certificate{cert})
+}
+func (b *CertificateBundle) AddCertPEM(data []byte) (*CertificateBundle, error) {
+	if b == nil {
+		return nil, invalid("nil certificate bundle", nil)
+	}
 	add, err := parseCertificatesPEM(data)
 	if err != nil {
 		return b, err
 	}
+	return b.addCertificates(add)
+}
+func (b *CertificateBundle) AddCertPath(path string) (*CertificateBundle, error) {
+	if b == nil {
+		return nil, invalid("nil certificate bundle", nil)
+	}
+	data, err := readRegular(path)
+	if err != nil {
+		return b, err
+	}
+	return b.AddCertPEM(data)
+}
+func (b *CertificateBundle) addCertificates(add []*x509.Certificate) (*CertificateBundle, error) {
 	all := append([]*x509.Certificate(nil), b.certs...)
 	all = append(all, add...)
 	next, err := normalizeBundle(all, b.key)
@@ -119,19 +184,6 @@ func (b *CertificateBundle) AddCertificatesPEM(data []byte) (*CertificateBundle,
 	}
 	next.keyPassphrase = append([]byte(nil), b.keyPassphrase...)
 	return next, nil
-}
-func (b *CertificateBundle) AddCert(path string) (*CertificateBundle, error) {
-	data, err := readRegular(path)
-	if err != nil {
-		return b, err
-	}
-	return b.AddCertificatesPEM(data)
-}
-func (b *CertificateBundle) AddCertificate(path string) (*CertificateBundle, error) {
-	return b.AddCert(path)
-}
-func (b *CertificateBundle) AddCertificates(data []byte) (*CertificateBundle, error) {
-	return b.AddCertificatesPEM(data)
 }
 func (b *CertificateBundle) AddKeyPEM(data, passphrase []byte) (*CertificateBundle, error) {
 	if b != nil && !signerIsNil(b.key) {

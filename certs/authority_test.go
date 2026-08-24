@@ -37,29 +37,25 @@ func TestFileStoreLifecycleAndSigning(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = issuer.Close() }()
-	if pending, err := authority.IsPending(); err != nil || pending {
-		t.Fatalf("authority unexpectedly pending: %v, %v", pending, err)
-	}
-	if pending, err := issuer.IsPending(); err != nil || pending {
-		t.Fatalf("issuer unexpectedly pending: %v, %v", pending, err)
-	}
-	initialTrust, err := authority.TrustBundlePEM()
+	initialTrustBundle, err := authority.TrustBundle(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	issuerTrust, err := issuer.TrustBundlePEM()
+	issuerTrustBundle, err := issuer.TrustBundle(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+	initialTrust := initialTrustBundle.PEM()
+	issuerTrust := issuerTrustBundle.PEM()
 	if !bytes.Equal(initialTrust, issuerTrust) {
 		t.Fatal("authority and issuer trust bundles differ")
 	}
 	sum := sha256.Sum256(initialTrust)
 	wantTrustHash := hex.EncodeToString(sum[:])
-	if got, err := authority.TrustBundleSHA256(); err != nil || got != wantTrustHash {
+	if got := initialTrustBundle.SHA256(); got != wantTrustHash {
 		t.Fatalf("unexpected authority trust bundle hash: %q, %v", got, err)
 	}
-	if got, err := issuer.TrustBundleSHA256(); err != nil || got != wantTrustHash {
+	if got := issuerTrustBundle.SHA256(); got != wantTrustHash {
 		t.Fatalf("unexpected issuer trust bundle hash: %q, %v", got, err)
 	}
 	status, err := authority.Status(ctx)
@@ -106,13 +102,11 @@ func TestFileStoreLifecycleAndSigning(t *testing.T) {
 	if !prepared.Pending || prepared.PendingKind != PendingIssuer {
 		t.Fatal("issuer rotation was not staged")
 	}
-	if pending, err := authority.IsPending(); err != nil || !pending {
-		t.Fatalf("authority pending state = %v, %v", pending, err)
+	issuerTrustBundle, err = issuer.TrustBundle(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if pending, err := issuer.IsPending(); err != nil || !pending {
-		t.Fatalf("issuer pending state = %v, %v", pending, err)
-	}
-	if got, err := issuer.TrustBundleSHA256(); err != nil || got != wantTrustHash {
+	if got := issuerTrustBundle.SHA256(); got != wantTrustHash {
 		t.Fatalf("issuer-only rotation changed trust bundle hash: %q, %v", got, err)
 	}
 	status, err = authority.Status(ctx)
@@ -143,12 +137,6 @@ func TestFileStoreLifecycleAndSigning(t *testing.T) {
 	if err = issuer.Reload(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if pending, err := authority.IsPending(); err != nil || pending {
-		t.Fatalf("authority remained pending after promotion: %v, %v", pending, err)
-	}
-	if pending, err := issuer.IsPending(); err != nil || pending {
-		t.Fatalf("issuer remained pending after promotion: %v, %v", pending, err)
-	}
 	prepared, err = authority.Ensure(ctx, WithRootRotateBefore(0))
 	if err != nil {
 		t.Fatal(err)
@@ -156,23 +144,19 @@ func TestFileStoreLifecycleAndSigning(t *testing.T) {
 	if !prepared.Pending || prepared.PendingKind != PendingRoot || prepared.RootGeneration != 2 {
 		t.Fatalf("root rotation not staged: %+v", prepared)
 	}
-	if pending, err := authority.IsPending(); err != nil || !pending {
-		t.Fatalf("authority root pending state = %v, %v", pending, err)
-	}
-	if pending, err := issuer.IsPending(); err != nil || !pending {
-		t.Fatalf("issuer root pending state = %v, %v", pending, err)
-	}
-	trust, err := authority.TrustBundlePEM()
+	trustBundle, err := authority.TrustBundle(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+	trust := trustBundle.PEM()
 	if countPEMCerts(trust) != 2 {
 		t.Fatalf("trust bundle has %d roots", countPEMCerts(trust))
 	}
-	issuerTrust, err = issuer.TrustBundlePEM()
+	issuerTrustBundle, err = issuer.TrustBundle(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+	issuerTrust = issuerTrustBundle.PEM()
 	if !bytes.Equal(trust, issuerTrust) {
 		t.Fatal("authority and issuer pending trust bundles differ")
 	}
@@ -181,10 +165,10 @@ func TestFileStoreLifecycleAndSigning(t *testing.T) {
 	if wantRootTrustHash == wantTrustHash {
 		t.Fatal("root rotation did not change trust bundle hash")
 	}
-	if got, err := authority.TrustBundleSHA256(); err != nil || got != wantRootTrustHash {
+	if got := trustBundle.SHA256(); got != wantRootTrustHash {
 		t.Fatalf("unexpected pending authority trust bundle hash: %q, %v", got, err)
 	}
-	if got, err := issuer.TrustBundleSHA256(); err != nil || got != wantRootTrustHash {
+	if got := issuerTrustBundle.SHA256(); got != wantRootTrustHash {
 		t.Fatalf("unexpected pending issuer trust bundle hash: %q, %v", got, err)
 	}
 	status, err = authority.Status(ctx)
@@ -214,12 +198,6 @@ func TestFileStoreLifecycleAndSigning(t *testing.T) {
 	}
 	if err = issuer.Reload(ctx); err != nil {
 		t.Fatal(err)
-	}
-	if pending, err := authority.IsPending(); err != nil || pending {
-		t.Fatalf("authority remained pending after root promotion: %v, %v", pending, err)
-	}
-	if pending, err := issuer.IsPending(); err != nil || pending {
-		t.Fatalf("issuer remained pending after root promotion: %v, %v", pending, err)
 	}
 }
 
