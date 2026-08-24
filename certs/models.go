@@ -338,9 +338,18 @@ func cloneSANPolicy(v SANPolicy) SANPolicy {
 	return out
 }
 
+type PendingKind string
+
+const (
+	PendingNone   PendingKind = ""
+	PendingRoot   PendingKind = "root"
+	PendingIssuer PendingKind = "issuer"
+)
+
 type EnsureResult struct {
 	Created        bool
 	Pending        bool
+	PendingKind    PendingKind
 	RootGeneration int
 	Revision       uint64
 	Issuers        []string
@@ -348,6 +357,13 @@ type EnsureResult struct {
 type PromotionResult struct {
 	RootGeneration int
 	Revision       uint64
+}
+
+type ManagerStatus struct {
+	Revision          uint64
+	Pending           bool
+	PendingKind       PendingKind
+	TrustBundleSHA256 string
 }
 
 type Inspection struct {

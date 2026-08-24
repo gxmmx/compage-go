@@ -42,6 +42,15 @@ func (e *ConflictError) Error() string { return "certs: conflict: " + e.Message 
 func (e *ConflictError) Unwrap() error { return e.Cause }
 func (*ConflictError) Kind() errx.Kind { return errx.Conflict }
 
+type PendingConflictError struct {
+	Operation PendingKind
+}
+
+func (e *PendingConflictError) Error() string {
+	return "certs: pending operation: " + string(e.Operation)
+}
+func (*PendingConflictError) Kind() errx.Kind { return errx.Conflict }
+
 type DriftError struct {
 	Field            string
 	Expected, Actual any

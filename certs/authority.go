@@ -187,7 +187,10 @@ func (m *AuthorityManager) Ensure(ctx context.Context, opts ...Option) (EnsureRe
 			return assertErr
 		}
 		if state.Pending != nil {
-			return &ConflictError{Message: "a pending operation must be promoted or discarded"}
+			return &ConflictError{
+				Message: "a pending operation must be promoted or discarded",
+				Cause:   &PendingConflictError{Operation: pendingKind(state.Pending.Kind)},
+			}
 		}
 		if _, signerErr := m.activeRootSigner(ctx, state); signerErr != nil {
 			return signerErr
@@ -228,6 +231,7 @@ func (m *AuthorityManager) Ensure(ctx context.Context, opts ...Option) (EnsureRe
 				return prepareErr
 			}
 			result.Pending = true
+			result.PendingKind = PendingRoot
 			result.RootGeneration = state.Pending.RootGeneration
 			return nil
 		}
@@ -247,6 +251,7 @@ func (m *AuthorityManager) Ensure(ctx context.Context, opts ...Option) (EnsureRe
 				return prepareErr
 			}
 			result.Pending = true
+			result.PendingKind = PendingIssuer
 			changed = true
 		}
 		result.RootGeneration = state.ActiveRoot

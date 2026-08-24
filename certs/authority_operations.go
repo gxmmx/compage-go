@@ -2,10 +2,8 @@ package certs
 
 import (
 	"context"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 )
 
@@ -246,19 +244,7 @@ func (m *AuthorityManager) TrustBundlePEM() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	now := m.now()
-	generations := []int{}
-	for g, r := range s.Roots {
-		if g == s.ActiveRoot || (s.Pending != nil && g == s.Pending.RootGeneration) || r.RetiredTrustUntil.After(now) {
-			generations = append(generations, g)
-		}
-	}
-	sort.Ints(generations)
-	var out []byte
-	for _, g := range generations {
-		out = append(out, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: s.Roots[g].CertificateDER})...)
-	}
-	return out, nil
+	return buildTrustBundlePEM(s, m.now()), nil
 }
 
 func (m *AuthorityManager) ExportGeneratedUnlock() ([]byte, error) {
