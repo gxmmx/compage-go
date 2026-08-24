@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"strings"
@@ -22,6 +23,7 @@ var oidSubjectAltName = asn1.ObjectIdentifier{2, 5, 29, 17}
 type IssuerManager struct {
 	mu                   sync.Mutex
 	store                backend
+	logger               *slog.Logger
 	name, slug           string
 	revision             uint64
 	definition           IssuerDefinition
@@ -53,7 +55,7 @@ func NewIssuerManager(opts ...Option) (*IssuerManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := &IssuerManager{store: o.store, name: name, slug: slug(name), now: time.Now}
+	m := &IssuerManager{store: o.store, logger: o.logger, name: name, slug: slug(name), now: time.Now}
 	if err = m.reload(context.Background()); err != nil {
 		return nil, err
 	}
@@ -328,7 +330,12 @@ func (m *IssuerManager) SignCSR(ctx context.Context, csrPEM []byte, opts ...Opti
 				return nil, e
 			}
 		}
-		return normalizeBundle([]*x509.Certificate{cert, m.issuerCert, m.rootCert}, nil)
+		bundle, bundleErr := normalizeBundle([]*x509.Certificate{cert, m.issuerCert, m.rootCert}, nil)
+		if bundleErr != nil {
+			return nil, bundleErr
+		}
+		debugLog(m.logger, "leaf certificate issued", "issuer", m.name, "version", m.version.Version, "subject_common_name", subject.CommonName, "profile", o.profile)
+		return bundle, nil
 	}
 	return nil, &ConflictError{Message: "could not allocate a unique certificate serial"}
 }

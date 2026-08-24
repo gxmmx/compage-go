@@ -53,6 +53,7 @@ func NewCSR(opts ...Option) (*CSRBundle, error) {
 	if err != nil {
 		return nil, corrupt("generated CSR", err)
 	}
+	debugLog(o.logger, "key created", "key_type", spec, "purpose", "csr")
 	return &CSRBundle{csr: csr, csrDER: der, key: key, passphrase: append([]byte(nil), o.keyPassphrase...)}, nil
 }
 

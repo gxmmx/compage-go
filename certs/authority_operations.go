@@ -21,6 +21,11 @@ func (m *AuthorityManager) PromotePending(ctx context.Context, opts ...Option) (
 	}
 	var result PromotionResult
 	var promotedSecret []byte
+	var promotedRootGeneration int
+	var promotedIssuers []struct {
+		name    string
+		version int
+	}
 	defer func() { zero(promotedSecret) }()
 	err = m.store.update(ctx, func(s *authorityState) error {
 		if err := m.assertSpec(s); err != nil {
@@ -30,6 +35,17 @@ func (m *AuthorityManager) PromotePending(ctx context.Context, opts ...Option) (
 			return &NotFoundError{Resource: "pending operation"}
 		}
 		p := s.Pending
+		if p.Kind == "root" {
+			promotedRootGeneration = p.RootGeneration
+		}
+		for slug, v := range p.Issuers {
+			if issuer := s.Issuers[slug]; issuer != nil {
+				promotedIssuers = append(promotedIssuers, struct {
+					name    string
+					version int
+				}{name: issuer.Definition.Name, version: v})
+			}
+		}
 		if p.Kind == "root" {
 			r := s.Roots[p.RootGeneration]
 			secret := o.rootUnlock
@@ -104,6 +120,12 @@ func (m *AuthorityManager) PromotePending(ctx context.Context, opts ...Option) (
 	if err != nil {
 		return PromotionResult{}, err
 	}
+	if promotedRootGeneration > 0 {
+		debugLog(m.logger, "root certificate promoted", "generation", promotedRootGeneration)
+	}
+	for _, issuer := range promotedIssuers {
+		debugLog(m.logger, "issuer certificate promoted", "issuer", issuer.name, "version", issuer.version, "generation", result.RootGeneration)
+	}
 	s, err := m.store.load(ctx, false)
 	if err != nil {
 		return PromotionResult{}, err
@@ -167,6 +189,8 @@ func (m *AuthorityManager) DiscardPending(ctx context.Context) error {
 		return &ConflictError{Message: "authority manager is closed"}
 	}
 	var generations []int
+	var discardedIssuers []string
+	var discardedRootGeneration int
 	err := m.store.update(ctx, func(s *authorityState) error {
 		if err := m.assertSpec(s); err != nil {
 			return err
@@ -176,16 +200,26 @@ func (m *AuthorityManager) DiscardPending(ctx context.Context) error {
 		}
 		p := s.Pending
 		if p.RootGeneration > 0 {
+			discardedRootGeneration = p.RootGeneration
 			delete(s.Roots, p.RootGeneration)
 			generations = append(generations, p.RootGeneration)
 		}
 		for slug, v := range p.Issuers {
+			if issuer := s.Issuers[slug]; issuer != nil {
+				discardedIssuers = append(discardedIssuers, issuer.Definition.Name)
+			}
 			delete(s.Issuers[slug].Versions, v)
 		}
 		s.Pending = nil
 		return nil
 	})
 	if err == nil {
+		if discardedRootGeneration > 0 {
+			debugLog(m.logger, "pending root certificate discarded", "generation", discardedRootGeneration)
+		}
+		for _, name := range discardedIssuers {
+			debugLog(m.logger, "pending issuer certificate discarded", "issuer", name)
+		}
 		for _, g := range generations {
 			zero(m.generated[g])
 			delete(m.generated, g)

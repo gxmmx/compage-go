@@ -2,6 +2,7 @@ package certs
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"reflect"
 	"time"
@@ -41,6 +42,7 @@ func (o option) optionName() string          { return o.name }
 
 type optionValues struct {
 	store                                                        backend
+	logger                                                       *slog.Logger
 	authorityName                                                string
 	authorityNameSet                                             bool
 	identity                                                     Identity
@@ -129,6 +131,15 @@ func WithStore(store any) Option {
 			return fmt.Errorf("supported store is required")
 		}
 		o.store = b
+		return nil
+	})
+}
+
+// WithLogger enables concise DEBUG lifecycle logging for the manager or CSR
+// constructor receiving the option. A nil logger disables logging.
+func WithLogger(logger *slog.Logger) Option {
+	return makeOption("WithLogger", scopeAuthority|scopeIssuerManager|scopeCSR, func(o *optionValues) error {
+		o.logger = logger
 		return nil
 	})
 }
