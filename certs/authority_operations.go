@@ -307,7 +307,7 @@ func (m *AuthorityManager) Inspect(ctx context.Context) (Inspection, error) {
 	out := Inspection{AuthorityID: s.Spec.ID, Revision: s.Revision, AuthorityName: s.Spec.Name, ActiveRoot: s.ActiveRoot, Issuers: map[string]int{}}
 	out.ActiveRootFingerprint = s.Roots[s.ActiveRoot].Fingerprint
 	if s.Pending != nil {
-		out.PendingKind = s.Pending.Kind
+		out.PendingKind = pendingKind(s.Pending.Kind)
 	}
 	for _, v := range s.Issuers {
 		out.Issuers[v.Definition.Name] = v.ActiveVersion

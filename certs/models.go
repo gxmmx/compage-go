@@ -372,7 +372,7 @@ type Inspection struct {
 	AuthorityName         string
 	ActiveRoot            int
 	ActiveRootFingerprint string
-	PendingKind           string
+	PendingKind           PendingKind
 	Issuers               map[string]int
 }
 
