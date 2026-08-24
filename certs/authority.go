@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ const maximumLeafValidity = 365 * 24 * time.Hour
 type AuthorityManager struct {
 	mu        sync.Mutex
 	store     backend
+	logger    *slog.Logger
 	config    optionValues
 	generated map[int][]byte
 	closed    bool
@@ -108,7 +110,7 @@ func NewAuthorityManager(opts ...Option) (*AuthorityManager, error) {
 			return nil, loadErr
 		}
 	}
-	return &AuthorityManager{store: o.store, config: o, generated: map[int][]byte{}, now: time.Now}, nil
+	return &AuthorityManager{store: o.store, logger: o.logger, config: o, generated: map[int][]byte{}, now: time.Now}, nil
 }
 
 func validateDefinition(d IssuerDefinition, name string) (IssuerDefinition, error) {
@@ -262,6 +264,7 @@ func (m *AuthorityManager) Ensure(ctx context.Context, opts ...Option) (EnsureRe
 		if result.RootGeneration == 0 {
 			result.RootGeneration = state.ActiveRoot
 		}
+		m.logEnsureChanges(result, state)
 	}
 	return result, err
 }
@@ -484,4 +487,43 @@ func (m *AuthorityManager) prepareIssuers(ctx context.Context, s *authorityState
 	}
 	s.Pending = pending
 	return nil
+}
+
+func (m *AuthorityManager) logEnsureChanges(result EnsureResult, state *authorityState) {
+	if result.Created {
+		debugLog(m.logger, "key created", "key_type", state.Spec.KeySpec, "purpose", "root", "generation", state.ActiveRoot)
+		debugLog(m.logger, "root certificate created", "generation", state.ActiveRoot, "pending", false)
+		for _, issuer := range state.Issuers {
+			debugLog(m.logger, "key created", "key_type", state.Spec.KeySpec, "purpose", "issuer", "issuer", issuer.Definition.Name, "generation", state.ActiveRoot, "version", issuer.ActiveVersion)
+			debugLog(m.logger, "issuer certificate created", "issuer", issuer.Definition.Name, "generation", state.ActiveRoot, "version", issuer.ActiveVersion, "pending", false)
+		}
+		return
+	}
+	if result.Pending && state.Pending != nil {
+		pending := state.Pending
+		if pending.Kind == "root" {
+			debugLog(m.logger, "key created", "key_type", state.Spec.KeySpec, "purpose", "root", "generation", pending.RootGeneration)
+			debugLog(m.logger, "root certificate created", "generation", pending.RootGeneration, "pending", true)
+		}
+		for slug, version := range pending.Issuers {
+			issuer := state.Issuers[slug]
+			if issuer == nil || issuer.Versions[version] == nil {
+				continue
+			}
+			record := issuer.Versions[version]
+			debugLog(m.logger, "key created", "key_type", state.Spec.KeySpec, "purpose", "issuer", "issuer", issuer.Definition.Name, "generation", record.RootGeneration, "version", version)
+			debugLog(m.logger, "issuer certificate created", "issuer", issuer.Definition.Name, "generation", record.RootGeneration, "version", version, "pending", true)
+		}
+		return
+	}
+	for _, name := range result.Issuers {
+		for _, issuer := range state.Issuers {
+			if issuer.Definition.Name != name {
+				continue
+			}
+			record := issuer.Versions[issuer.ActiveVersion]
+			debugLog(m.logger, "key created", "key_type", state.Spec.KeySpec, "purpose", "issuer", "issuer", name, "generation", record.RootGeneration, "version", record.Version)
+			debugLog(m.logger, "issuer certificate created", "issuer", name, "generation", record.RootGeneration, "version", record.Version, "pending", false)
+		}
+	}
 }

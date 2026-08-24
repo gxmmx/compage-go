@@ -26,3 +26,18 @@ unsafe file types at their security boundaries.
 FileStore and SQLiteStore do not migrate data between one another. Applications
 must perform an explicit, audited export/import workflow if they change
 backends; automatic migration is intentionally outside v1.
+
+## Debug logging
+
+Pass an optional `*slog.Logger` to `NewAuthorityManager`, `NewIssuerManager`,
+or `NewCSR` with `WithLogger`. The package emits concise DEBUG events for key
+and certificate creation, staged reconciliation, promotion, discard, and leaf
+issuance. Passing `nil` disables logging.
+
+```go
+authority, err := certs.NewAuthorityManager(
+	certs.WithStore(store),
+	certs.WithLogger(logger),
+	certs.WithAuthorityName("Example Authority"),
+)
+```
