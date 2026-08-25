@@ -1,6 +1,7 @@
 package config
 
 import (
+	"go/token"
 	"reflect"
 	"sort"
 	"strings"
@@ -10,11 +11,23 @@ import (
 	"github.com/gxmmx/compage-go/errx"
 )
 
+type elementField struct {
+	name  string
+	index int
+	typ   reflect.Type
+}
+
+type elementSchema struct {
+	typ    reflect.Type
+	fields []elementField
+}
+
 // fieldMeta is the immutable reflected description of one supported leaf field.
 type fieldMeta struct {
 	key, field, env, flag, validate string
 	index                           []int
 	typ                             reflect.Type
+	elements                        *elementSchema
 	required, sensitive, save       bool
 	def                             string
 	hasDef                          bool
@@ -70,11 +83,19 @@ func makeRegistry[T any](o options) (registry, error) {
 				}
 				continue
 			}
-			if !supported(ft) {
+			var elements *elementSchema
+			if ft.Kind() == reflect.Slice && ft != reflect.TypeFor[[]string]() {
+				var err error
+				elements, err = compileElementSchema(ft)
+				if err != nil {
+					return err
+				}
+			}
+			if !supported(ft) && elements == nil {
 				return configErr("unsupported field type", errx.Invalid, strings.Join(append(prefix, name), "."), sf.Name, "", nil, false)
 			}
 			key := strings.Join(append(prefix, name), ".")
-			f := fieldMeta{key: key, field: sf.Name, index: idx, typ: ft}
+			f := fieldMeta{key: key, field: sf.Name, index: idx, typ: ft, elements: elements}
 			if d, ok := sf.Tag.Lookup("default"); ok {
 				f.def, f.hasDef = d, true
 			}
@@ -169,6 +190,48 @@ func hasNonNamespaceTag(f reflect.StructField) bool {
 
 func supported(t reflect.Type) bool {
 	return t == reflect.TypeFor[string]() || t == reflect.TypeFor[bool]() || t == reflect.TypeFor[int]() || t == reflect.TypeFor[int64]() || t == reflect.TypeFor[uint]() || t == reflect.TypeFor[uint64]() || t == reflect.TypeFor[float64]() || t == reflect.TypeFor[time.Duration]() || t == reflect.TypeFor[[]string]()
+}
+
+func compileElementSchema(t reflect.Type) (*elementSchema, error) {
+	if t.Kind() != reflect.Slice || t.Elem().Kind() != reflect.Struct || t.Elem() == reflect.TypeFor[time.Duration]() || !token.IsExported(t.Elem().Name()) {
+		return nil, configErr("unsupported structured element type", errx.Invalid, "", "", "", nil, false)
+	}
+	e := &elementSchema{typ: t.Elem()}
+	seen := map[string]bool{}
+	for i := 0; i < t.Elem().NumField(); i++ {
+		field := t.Elem().Field(i)
+		if field.PkgPath != "" {
+			return nil, configErr("unexported structured element field", errx.Invalid, "", field.Name, "", nil, false)
+		}
+		name, set := field.Tag.Lookup("cfg")
+		if !set {
+			name = snake(field.Name)
+		}
+		if name == "" || name == "-" || strings.Contains(name, ".") {
+			return nil, configErr("invalid structured element key", errx.Invalid, "", field.Name, "", nil, false)
+		}
+		for _, tag := range []string{"default", "required", "env", "flag", "save", "sensitive", "validate"} {
+			if _, ok := field.Tag.Lookup(tag); ok {
+				return nil, configErr("unsupported structured element tag", errx.Invalid, "", field.Name, "", nil, false)
+			}
+		}
+		if !supportedElementField(field.Type) {
+			return nil, configErr("unsupported structured element field", errx.Invalid, "", field.Name, "", nil, false)
+		}
+		if seen[name] {
+			return nil, configErr("duplicate structured element key", errx.Invalid, "", field.Name, "", nil, false)
+		}
+		seen[name] = true
+		e.fields = append(e.fields, elementField{name: name, index: i, typ: field.Type})
+	}
+	if len(e.fields) == 0 {
+		return nil, configErr("structured element has no fields", errx.Invalid, "", "", "", nil, false)
+	}
+	return e, nil
+}
+
+func supportedElementField(t reflect.Type) bool {
+	return supported(t) && t != reflect.TypeFor[[]string]()
 }
 func hasConfigTag(f reflect.StructField) bool {
 	for _, k := range []string{"cfg", "env", "flag", "default", "required", "sensitive", "save", "validate"} {

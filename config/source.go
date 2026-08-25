@@ -1,5 +1,7 @@
 package config
 
+import "reflect"
+
 // Source identifies a configuration layer.
 type Source uint8
 
@@ -58,10 +60,10 @@ func cloneRaw(in map[string]any) map[string]any {
 }
 
 func cloneRawValue(value any) any {
-	if values, ok := value.([]string); ok {
-		return append([]string(nil), values...)
+	if value == nil {
+		return nil
 	}
-	return value
+	return cloneReflectValue(reflect.ValueOf(value)).Interface()
 }
 
 func cloneLayers(in map[Source]map[string]any) map[Source]map[string]any {
