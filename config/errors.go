@@ -87,7 +87,7 @@ func classifyError(base *Error) error {
 	switch typ {
 	case "invalid option", "nil option", "invalid config environment variable", "invalid environment prefix":
 		return &OptionError{errorDetail{base}}
-	case "schema must be a struct", "excluded field has config tags", "invalid config key", "embedded field cannot have cfg tag", "unsupported nested field tag", "unsupported field type", "invalid required tag", "required field has default", "invalid sensitive tag", "invalid save tag", "unknown validator", "invalid env tag", "invalid flag tag", "duplicate config key", "scalar conflicts with namespace", "duplicate environment variable", "duplicate flag":
+	case "schema must be a struct", "excluded field has config tags", "invalid config key", "embedded field cannot have cfg tag", "unsupported nested field tag", "unsupported field type", "unsupported structured element type", "unexported structured element field", "invalid structured element key", "unsupported structured element tag", "unsupported structured element field", "duplicate structured element key", "structured element has no fields", "invalid required tag", "required field has default", "invalid sensitive tag", "invalid save tag", "unknown validator", "invalid env tag", "invalid flag tag", "duplicate config key", "scalar conflicts with namespace", "duplicate environment variable", "duplicate flag":
 		return &SchemaError{errorDetail{base}}
 	case "default value":
 		return &DefaultValueError{errorDetail{base}}

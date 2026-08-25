@@ -44,7 +44,7 @@ func resolve[T any](r registry, layers map[Source]map[string]any, path string, f
 			}
 			continue
 		}
-		value, err := coerce(raw, field.typ)
+		value, err := coerceWithSchema(raw, field.typ, field.elements)
 		if err != nil {
 			if source == SourceDefault {
 				return st, configErr("default value", errx.Invalid, field.key, field.field, source.String(), err, false)

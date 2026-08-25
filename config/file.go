@@ -110,7 +110,9 @@ func (c *Config[T]) Save() error {
 			sensitive = true
 		}
 		value := reflectValueAt(v, f.index).Interface()
-		if f.typ == reflect.TypeFor[time.Duration]() {
+		if f.elements != nil {
+			value = encodeStructuredSlice(reflectValueAt(v, f.index), f.elements)
+		} else if f.typ == reflect.TypeFor[time.Duration]() {
 			value = value.(time.Duration).String()
 		}
 		putNested(root, strings.Split(f.key, "."), value)
@@ -156,6 +158,27 @@ func (c *Config[T]) Save() error {
 		_ = directory.Close()
 	}
 	return nil
+}
+
+func encodeStructuredSlice(value reflect.Value, schema *elementSchema) []any {
+	if value.IsNil() {
+		return nil
+	}
+	items := make([]any, value.Len())
+	for i := 0; i < value.Len(); i++ {
+		element := value.Index(i)
+		object := make(map[string]any, len(schema.fields))
+		for _, field := range schema.fields {
+			item := element.Field(field.index)
+			if field.typ == reflect.TypeFor[time.Duration]() {
+				object[field.name] = item.Interface().(time.Duration).String()
+			} else {
+				object[field.name] = item.Interface()
+			}
+		}
+		items[i] = object
+	}
+	return items
 }
 
 func encodeFile(path string, root map[string]any) ([]byte, error) {

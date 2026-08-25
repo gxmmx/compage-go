@@ -14,6 +14,9 @@
 // only save-tagged values whose effective source is default, file, or set; initial,
 // flag, and environment values remain transient. Sensitive defaults are never
 // written, and sensitive persisted values cause Save to use mode 0600.
+// Structured slices of exported structs containing supported scalar fields are
+// represented as native arrays of objects in files and as JSON arrays of objects
+// for defaults, environment variables, flags, and string-form mutations.
 //
 // For example:
 //

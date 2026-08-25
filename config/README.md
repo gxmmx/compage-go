@@ -40,6 +40,14 @@ pflag `StringSlice`, such as `one,two`. Quote a value containing a comma
 (`"say ""hello""",three`). This applies to defaults, environment variables, and
 flags; for example, `default:"one,two"` and `MYAPP_TAGS=one,two`.
 
+Structured slices such as `[]Item` are also supported when `Item` is an exported
+struct containing only exported scalar fields from the list above (excluding
+`[]string`). Element names use the same snake-case rule or an element-level
+`cfg` tag. The parent slice owns all source, validation, persistence, and
+sensitivity tags; element fields cannot use those tags. Defaults, environment
+variables, flags, and string-form initial or set values use a JSON array of
+objects. Files and saved output use native arrays of objects.
+
 | Tag | Meaning |
 | --- | --- |
 | `cfg` | File key component. Omitted names derive from the Go field name as lower snake case; `-` excludes the field. |
