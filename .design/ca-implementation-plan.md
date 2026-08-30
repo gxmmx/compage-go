@@ -369,7 +369,7 @@ Issuer managers cache a signer with its authority revision. In `Ledger` mode, ea
 
 ### CertificateBundle
 
-`LoadBundle` accepts repeatable `WithCert(path)` values and an optional `WithKey(path)` value. Every input may contain one or more PEM certificate blocks; malformed PEM and non-certificate blocks are errors. Files may be supplied in any order.
+`LoadBundle` accepts repeatable `WithCert`, `WithCertPEM`, and `WithCertPath` values, plus an optional loaded signer through `WithKey` or a key file through `WithKeyPath`. Every input may contain one or more PEM certificate blocks; malformed PEM and non-certificate blocks are errors. Files may be supplied in any order.
 
 Build one connected, linear certificate component, which may be partial and may begin at any point:
 

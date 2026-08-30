@@ -38,7 +38,7 @@ func TestSQLiteStoreAndEncryptedCSRKey(t *testing.T) {
 	if err = csr.SaveKey(keyPath); err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := LoadBundle(WithKey(keyPath), WithKeyPassphrase([]byte("test passphrase")))
+	loaded, err := LoadBundle(WithKeyPath(keyPath), WithKeyPassphrase([]byte("test passphrase")))
 	if err != nil {
 		t.Fatal(err)
 	}

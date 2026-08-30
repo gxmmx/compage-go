@@ -3,6 +3,7 @@ package certs
 import (
 	"bytes"
 	"crypto"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -41,13 +42,17 @@ func NewCertificateBundle(opts ...Option) (*CertificateBundle, error) {
 
 func loadCertificateBundle(o optionValues) (*CertificateBundle, error) {
 	if o.keyPassphraseSet && !o.keyPathSet {
-		return nil, invalid("WithKeyPassphrase requires WithKey", nil)
+		return nil, invalid("WithKeyPassphrase requires WithKeyPath", nil)
 	}
 	certificates, err := loadCertificateInputs(o)
 	if err != nil {
 		return nil, err
 	}
-	b, err := normalizeBundle(certificates, nil)
+	var key crypto.Signer
+	if o.keySet {
+		key = o.key
+	}
+	b, err := normalizeBundle(certificates, key)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +67,7 @@ func loadCertificateBundle(o optionValues) (*CertificateBundle, error) {
 		}
 		b = next
 	}
-	if len(certificates) == 0 && !o.keyPathSet {
+	if len(certificates) == 0 && !o.keyPathSet && !o.keySet {
 		return nil, invalid("at least one certificate or key is required", nil)
 	}
 	return b, nil
@@ -347,6 +352,28 @@ func (b *CertificateBundle) Key() crypto.Signer {
 	}
 	return b.key
 }
+
+// TLSCertificate returns the leaf certificate, intermediates, and private key
+// in the form expected by crypto/tls. The root certificate is omitted from the
+// TLS chain because peers are expected to obtain trust anchors independently.
+func (b *CertificateBundle) TLSCertificate() (tls.Certificate, error) {
+	if b == nil || b.leaf == nil {
+		return tls.Certificate{}, &NotFoundError{Resource: "terminal certificate"}
+	}
+	if signerIsNil(b.key) {
+		return tls.Certificate{}, &NotFoundError{Resource: "private key"}
+	}
+	if err := b.Validate(); err != nil {
+		return tls.Certificate{}, err
+	}
+
+	chain := make([][]byte, 0, 1+len(b.intermediates))
+	for _, cert := range append([]*x509.Certificate{b.leaf}, b.intermediates...) {
+		chain = append(chain, append([]byte(nil), cert.Raw...))
+	}
+	return tls.Certificate{Certificate: chain, PrivateKey: b.key, Leaf: cloneCertificate(b.leaf)}, nil
+}
+
 func (b *CertificateBundle) Validate() error {
 	if b == nil {
 		return invalid("nil certificate bundle", nil)

@@ -1,6 +1,7 @@
 package certs
 
 import (
+	"crypto"
 	"crypto/x509"
 	"fmt"
 	"log/slog"
@@ -82,6 +83,8 @@ type optionValues struct {
 	certificates                                                 []*x509.Certificate
 	certPEM                                                      [][]byte
 	certPaths                                                    []string
+	key                                                          crypto.Signer
+	keySet                                                       bool
 	keyPath                                                      string
 	keyPathSet                                                   bool
 	replace                                                      bool
@@ -251,10 +254,30 @@ func WithCertPath(path string) Option {
 		return nil
 	})
 }
-func WithKey(path string) Option {
+
+// WithKey supplies a private key that has already been loaded.
+func WithKey(key crypto.Signer) Option {
 	return makeOption("WithKey", scopeLoad, func(o *optionValues) error {
+		if signerIsNil(key) {
+			return fmt.Errorf("key is nil")
+		}
+		if o.keyPathSet {
+			return fmt.Errorf("key path is already specified")
+		}
+		o.key = key
+		o.keySet = true
+		return nil
+	})
+}
+
+// WithKeyPath loads a private key from path.
+func WithKeyPath(path string) Option {
+	return makeOption("WithKeyPath", scopeLoad, func(o *optionValues) error {
 		if path == "" {
 			return fmt.Errorf("path is empty")
+		}
+		if o.keySet {
+			return fmt.Errorf("key is already specified")
 		}
 		o.keyPath = path
 		o.keyPathSet = true

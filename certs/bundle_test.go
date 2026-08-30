@@ -28,7 +28,7 @@ func TestLoadBundleAcceptsArbitraryCertificateOrder(t *testing.T) {
 	if err = os.WriteFile(keyPath, keyPEM, 0600); err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := LoadBundle(WithCertPath(paths[0]), WithCertPath(paths[1]), WithCertPath(paths[2]), WithKey(keyPath))
+	loaded, err := LoadBundle(WithCertPath(paths[0]), WithCertPath(paths[1]), WithCertPath(paths[2]), WithKeyPath(keyPath))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,6 +86,28 @@ func TestCertificateBundleAcceptsObjectAndPEMSources(t *testing.T) {
 	}
 	if !loaded.Complete() || len(loaded.Certificates()) != 3 {
 		t.Fatal("object and PEM sources did not produce a complete certificate bundle")
+	}
+}
+
+func TestCertificateBundleAcceptsKeyObjectAndBuildsTLSCertificate(t *testing.T) {
+	issued, csr := newIssuedBundle(t)
+	loaded, err := NewCertificateBundle(WithCertPEM(certsPEM(issued.Certificates())), WithKey(csr.Key()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tlsCert, err := loaded.TLSCertificate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tlsCert.Certificate) != 2 {
+		t.Fatalf("TLS certificate contains %d certificates, want leaf and intermediate", len(tlsCert.Certificate))
+	}
+	if !bytes.Equal(tlsCert.Certificate[0], issued.Certificate().Raw) || !bytes.Equal(tlsCert.Certificate[1], issued.Intermediates()[0].Raw) {
+		t.Fatal("TLS certificate chain is not leaf-first without the root")
+	}
+	if tlsCert.PrivateKey == nil || tlsCert.Leaf == nil || !bytes.Equal(tlsCert.Leaf.Raw, issued.Certificate().Raw) {
+		t.Fatal("TLS certificate is missing its key or leaf")
 	}
 }
 
