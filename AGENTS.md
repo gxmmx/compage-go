@@ -13,7 +13,6 @@ extended guidance.
 
 ## Repository structure
 
-- `.design/` contains active implementation plans and design documents.
 - `.dist/` contains disposable generated output and is ignored by Git.
 - `.tests/unit/run.sh` is the shared entry point for package unit tests, race
   tests, coverage, and fuzz smoke tests.
@@ -55,3 +54,17 @@ or end-to-end suites.
 - Keep generated artifacts under `.dist/` and do not commit them.
 - Keep `mise.toml` and its tool versions as the authoritative workflow
   configuration.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues for `gxmmx/compage-go`. See `.repo/domain/issue-tracker.md`.
+
+### Status labels
+
+GX skills use five canonical status labels. See `.repo/domain/status-labels.md`.
+
+### Domain docs
+
+Domain vocabulary and decisions live under `.repo/domain/`. See `.repo/domain/domain.md`.
