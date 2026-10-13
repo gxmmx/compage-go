@@ -94,6 +94,11 @@ Reusable test and lint entry points live under [`.tests/`](./.tests/): unit test
 are handled by [`.tests/unit/run.sh`](./.tests/unit/run.sh), and linting uses the
 configuration in [`.tests/lint/.golangci.yml`](./.tests/lint/.golangci.yml).
 
-## License
+## Contributing
 
-MIT
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, development checks, and pull
+request guidance.
+
+## Licence
+
+This project is licensed under the [MIT License](./LICENSE).
