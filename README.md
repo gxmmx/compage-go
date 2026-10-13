@@ -102,6 +102,11 @@ Current implementation plans are kept under [`.design/`](./.design/):
 - [`ca-implementation-plan.md`](./.design/ca-implementation-plan.md)
 - [`interactive-prompter-plan.md`](./.design/interactive-prompter-plan.md)
 
-## License
+## Contributing
 
-MIT
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, development checks, and pull
+request guidance.
+
+## Licence
+
+This project is licensed under the [MIT License](./LICENSE).
