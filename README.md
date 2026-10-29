@@ -94,12 +94,11 @@ Reusable test and lint entry points live under [`.tests/`](./.tests/): unit test
 are handled by [`.tests/unit/run.sh`](./.tests/unit/run.sh), and linting uses the
 configuration in [`.tests/lint/.golangci.yml`](./.tests/lint/.golangci.yml).
 
-## Design documents
+## Contributing
 
-Current implementation plans are kept under [`.design/`](./.design/):
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, development checks, and pull
+request guidance.
 
-- [`interactive-prompter-plan.md`](./.design/interactive-prompter-plan.md)
+## Licence
 
-## License
-
-MIT
+This project is licensed under the [MIT License](./LICENSE).
