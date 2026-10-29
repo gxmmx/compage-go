@@ -98,8 +98,6 @@ configuration in [`.tests/lint/.golangci.yml`](./.tests/lint/.golangci.yml).
 
 Current implementation plans are kept under [`.design/`](./.design/):
 
-- [`configv2-plan.md`](./.design/configv2-plan.md)
-- [`ca-implementation-plan.md`](./.design/ca-implementation-plan.md)
 - [`interactive-prompter-plan.md`](./.design/interactive-prompter-plan.md)
 
 ## License
